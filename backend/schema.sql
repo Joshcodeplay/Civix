@@ -14,6 +14,8 @@ create table if not exists complaints (
     embedding vector(3072), -- Gemini text-embedding-004 has 768 dimensions
     upvote_count integer default 1,
     status text default 'pending',
+    name text,
+    phone_number text,
     created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
