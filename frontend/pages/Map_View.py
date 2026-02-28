@@ -104,7 +104,7 @@ else:
         lat = issue.get("latitude")
         lon = issue.get("longitude")
         if lat and lon:
-            desc = issue.get("description", "No description")
+            desc = issue.get("description", "No description").replace('\n', ' ')
             votes = issue.get("votes", 0)
             is_emergency = issue.get("emergency", False)
             status = issue.get("status", "Pending")
@@ -112,8 +112,11 @@ else:
             color = "red" if is_emergency else ("green" if status.lower() == "resolved" else "blue")
             icon = folium.Icon(color=color, icon="info-sign")
             
+            img_html = f'<div style="width:100%; height:120px; overflow:hidden; border-radius:6px; margin-bottom:10px;"><img src="{issue.get("image_url")}" style="width:100%; height:100%; object-fit:cover;" /></div>' if issue.get("image_url") else ''
+            
             html_popup = f"""
-            <div style="font-family: sans-serif; min-width:200px;">
+            <div style="font-family: sans-serif; min-width:220px;">
+                {img_html}
                 <b style="color:#0f172a; font-size:14px;">{issue.get('title', 'Civic Issue')}</b><br>
                 <span style="color:#64748b; font-size:12px;">{desc[:50]}...</span><br><br>
                 <div style="display:flex; justify-content:space-between;">

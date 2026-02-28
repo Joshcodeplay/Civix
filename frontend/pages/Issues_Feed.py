@@ -94,8 +94,10 @@ else:
         cols[0].markdown(f"**#{issue['id']}**<br><span style='color:{status_color}; font-size:0.85rem; font-weight:600;'>{issue.get('status', 'Pending')}</span>", unsafe_allow_html=True)
         
         # Description
-        desc_preview = issue.get('description', '')[:60] + "..." if len(issue.get('description', '')) > 60 else issue.get('description', '')
-        cols[1].markdown(f"**{issue.get('title', 'Issue')}**<br><span style='font-size:0.85rem; color:#64748b;'>{desc_preview}</span>", unsafe_allow_html=True)
+        raw_desc = issue.get('description', '').replace('\n', ' ')
+        desc_preview = raw_desc[:75] + "..." if len(raw_desc) > 75 else raw_desc
+        img_html = f"<div style='margin-top:8px;'><img src='{issue.get('image_url')}' style='width:100px; height:60px; object-fit:cover; border-radius:6px; border:1px solid #e2e8f0;'/></div>" if issue.get("image_url") else ""
+        cols[1].markdown(f"**{desc_preview}**<br><span style='font-size:0.85rem; color:#64748b;'>{issue.get('title', 'Issue')}</span>{img_html}", unsafe_allow_html=True)
         
         # Location
         cols[2].markdown(f"<span style='font-size:0.9rem;'>{issue.get('ward', 'General')}</span>", unsafe_allow_html=True)

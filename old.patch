@@ -1,0 +1,1067 @@
+commit 34f69b583194d4c54a70331f257d34f52fdd1162
+Merge: bf6a2ea 33655cb
+Author: Joshcodeplay <joshuaalmeida003@gmail.com>
+Date:   Sat Feb 28 23:15:02 2026 +0530
+
+    Merge pull request #5 from Joshcodeplay/sos-proto
+    
+     SOS created
+
+commit 33655cb73bca5be86f257cf09bea30aecd34daf7
+Author: Joshua Almeida <joshuaalmeida003@gmail.com>
+Date:   Sat Feb 28 23:11:01 2026 +0530
+
+     SOS created
+
+diff --git a/backend/main.py b/backend/main.py
+index 055f9ca..7b7a6b7 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -60,6 +60,11 @@ class GeneratePDFRequest(BaseModel):
+     category: str
+     location: str
+ 
++class SOSRequest(BaseModel):
++    description: str
++    latitude: float
++    longitude: float
++
+ app = FastAPI(title="Vox Backend", description="Vox civic grievance platform backend API")
+ 
+ @app.post("/api/submit-issue")
+@@ -208,6 +213,64 @@ async def submit_issue(request: IssueSubmitRequest):
+     except Exception as e:
+         raise HTTPException(status_code=500, detail=f"Failed to save complaint to database: {str(e)}")
+ 
++@app.post("/api/sos")
++async def report_sos(request: SOSRequest):
++    if not supabase:
++        raise HTTPException(status_code=500, detail="Supabase client not initialized")
++        
++    try:
++        new_sos = {
++            "description": f"SOS EMERGENCY: {request.description}",
++            "issue_type": "SOS Emergency",
++            "severity": "Critical",
++            "latitude": request.latitude,
++            "longitude": request.longitude,
++            "status": "pending",
++            "upvote_count": 999  # Give it high priority
++        }
++        
++        insert_response = supabase.table("complaints").insert(new_sos).execute()
++        
++        return {
++            "status": "success",
++            "message": "SOS alert broadcasted to nearby users.",
++            "data": insert_response.data[0] if insert_response.data else None
++        }
++    except Exception as e:
++        raise HTTPException(status_code=500, detail=f"Failed to broadcast SOS: {str(e)}")
++
++@app.get("/api/active-sos")
++async def get_active_sos(
++    lat: float = Query(...),
++    lon: float = Query(...),
++    radius: float = Query(5.0)  # Default 5km radius
++):
++    if not supabase:
++        raise HTTPException(status_code=500, detail="Supabase client not initialized")
++        
++    try:
++        # Get pending SOS emergencies
++        response = supabase.table("complaints").select("id, description, latitude, longitude, created_at").eq("status", "pending").eq("issue_type", "SOS Emergency").order("created_at", desc=True).execute()
++        
++        active_alerts = []
++        for row in response.data:
++            i_lat = row.get("latitude")
++            i_lon = row.get("longitude")
++            
++            if i_lat is not None and i_lon is not None:
++                dist = calculate_distance(lat, lon, i_lat, i_lon)
++                if dist <= radius:
++                    active_alerts.append({
++                        "id": row.get("id"),
++                        "description": row.get("description").replace("SOS EMERGENCY: ", ""),
++                        "distance_km": round(dist, 2),
++                        "time": row.get("created_at")[:16].replace("T", " ") if row.get("created_at") else "Just now"
++                    })
++                    
++        return {"alerts": active_alerts}
++    except Exception as e:
++        raise HTTPException(status_code=500, detail=f"Failed to fetch SOS alerts: {str(e)}")
++
+ @app.post("/api/parse-circular")
+ async def parse_circular(file: UploadFile = File(...)):
+     if not file.filename.endswith(".pdf"):
+
+commit 1ce91932fd0903ef75427f50daea0101ae5328bf
+Author: devdominic2004 <devdominic2004@gmail.com>
+Date:   Sat Feb 28 23:07:32 2026 +0530
+
+    admin dashboard proto
+
+diff --git a/backend/main.py b/backend/main.py
+index 055f9ca..0a7e3ed 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -451,6 +451,54 @@ async def get_dashboard_stats():
+     emergency = sum(1 for r in res.data if r.get("severity", "").lower() in ["high", "critical"])
+     return {"total": total, "active": active, "resolved": resolved, "emergency": emergency}
+ 
++class StatusUpdateRequest(BaseModel):
++    status: str
++
++@app.patch("/api/admin/update-status/{issue_id}")
++async def update_issue_status(issue_id: int, request: StatusUpdateRequest):
++    if not supabase:
++        raise HTTPException(status_code=500, detail="Supabase client not initialized")
++    valid_statuses = ["Pending", "In Progress", "Resolved", "Closed"]
++    if request.status not in valid_statuses:
++        raise HTTPException(status_code=400, detail="Invalid status")
++    try:
++        res = supabase.table("complaints").update({"status": request.status}).eq("id", issue_id).execute()
++        if not res.data:
++            raise HTTPException(status_code=404, detail="Issue not found")
++        return {"status": "success", "data": res.data[0]}
++    except Exception as e:
++        raise HTTPException(status_code=500, detail=str(e))
++
++@app.get("/api/admin/stats")
++async def get_admin_stats():
++    if not supabase:
++        raise HTTPException(status_code=500, detail="Supabase client not initialized")
++    try:
++        # Get all complaints to aggregate
++        res = supabase.table("complaints").select("id, status, severity, issue_type, ward, latitude, longitude, upvote_count, description, created_at, reporter_name, reporter_phone, image_url").execute()
++        
++        complaints = res.data
++        total_complaints = len(complaints)
++        
++        # Aggregate by category
++        categories = {}
++        for c in complaints:
++            cat = c.get("issue_type") or "Unknown"
++            categories[cat] = categories.get(cat, 0) + 1
++            
++        # Get top 5 most upvoted unresolved complaints
++        active_complaints = [c for c in complaints if c.get("status", "").lower() not in ["resolved", "closed"]]
++        top_priority = sorted(active_complaints, key=lambda x: x.get("upvote_count", 0), reverse=True)[:5]
++        
++        return {
++            "total_complaints": total_complaints,
++            "category_counts": categories,
++            "top_priority": top_priority,
++            "all_complaints": complaints
++        }
++    except Exception as e:
++        raise HTTPException(status_code=500, detail=str(e))
++
+ @app.get("/api/insights")
+ async def get_insights():
+     if not supabase: return {"top_category": "N/A", "top_ward": "General", "trending": []}
+
+commit c08fa74d61dcab242f122ab5f0cc820d6930cc47
+Author: devdominic2004 <devdominic2004@gmail.com>
+Date:   Sat Feb 28 21:57:36 2026 +0530
+
+    Stable full app
+
+diff --git a/backend/main.py b/backend/main.py
+index 00d36a0..055f9ca 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -45,6 +45,8 @@ class IssueSubmitRequest(BaseModel):
+     latitude: Optional[float] = None
+     longitude: Optional[float] = None
+     image_url: Optional[str] = None
++    reporter_name: Optional[str] = None
++    reporter_phone: Optional[str] = None
+ 
+ class CheckDuplicateRequest(BaseModel):
+     description: str
+@@ -188,6 +190,8 @@ async def submit_issue(request: IssueSubmitRequest):
+             "latitude": request.latitude,
+             "longitude": request.longitude,
+             "image_url": request.image_url,
++            "reporter_name": request.reporter_name,
++            "reporter_phone": request.reporter_phone,
+             "embedding": embedding,
+             "upvote_count": 1,
+             "status": "pending"
+
+commit bcf264dc156a4eec6442ca247c6ad8dd7fecbf46
+Merge: 96ff6ba 6933929
+Author: devdominic2004 <devdominic2004@gmail.com>
+Date:   Sat Feb 28 20:02:21 2026 +0530
+
+    Merge updated-frontend, keeping supabase lock
+
+commit 96ff6ba80e3b511c7c51475a8cfe4cdeb38cfb3f
+Author: devdominic2004 <devdominic2004@gmail.com>
+Date:   Sat Feb 28 19:58:10 2026 +0530
+
+    backup: current working version before pulling joshua's main
+
+diff --git a/backend/main.py b/backend/main.py
+index b55f63f..fcee5d9 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -417,7 +417,7 @@ async def generate_pdf(request: GeneratePDFRequest):
+ 
+ @app.get("/api/dashboard_stats")
+ async def get_dashboard_stats():
+-    if not supabase: return {}
++    if not supabase: return {"total": 0, "active": 0, "resolved": 0, "emergency": 0}
+     res = supabase.table("complaints").select("id, status, severity").execute()
+     total = len(res.data)
+     active = sum(1 for r in res.data if r.get("status", "").lower() in ["pending", "in progress"])
+@@ -427,7 +427,7 @@ async def get_dashboard_stats():
+ 
+ @app.get("/api/insights")
+ async def get_insights():
+-    if not supabase: return {}
++    if not supabase: return {"top_category": "N/A", "top_ward": "General", "trending": []}
+     res = supabase.table("complaints").select("issue_type, ward").execute()
+     counts = {}
+     ward_counts = {}
+
+commit 6933929a07fdcdcbc53f9dfa5971de4c4ab4a8e2
+Author: Joshua Almeida <joshuaalmeida003@gmail.com>
+Date:   Sat Feb 28 19:57:32 2026 +0530
+
+     Please enter the commit message for your changes. Lines starting
+     with '#' will be ignored, and an empty message aborts the commit.
+            modified:   backend/main.py
+            modified:   backend/requirements.txt
+            modified:   frontend/pages/Home.py
+            modified:   frontend/pages/Issues_Feed.py
+            modified:   frontend/pages/Map_View.py
+            modified:   frontend/requirements.txt
+
+diff --git a/backend/main.py b/backend/main.py
+index b55f63f..5f6016d 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -1,6 +1,7 @@
+ import os
+ import json
+-from fastapi import FastAPI, UploadFile, File, HTTPException
++import math
++from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+ from fastapi.responses import StreamingResponse
+ from pydantic import BaseModel
+ import io
+@@ -251,8 +252,20 @@ async def parse_circular(file: UploadFile = File(...)):
+     except Exception as e:
+         raise HTTPException(status_code=500, detail=f"Failed to parse circular: {str(e)}")
+ 
++def calculate_distance(lat1, lon1, lat2, lon2):
++    R = 6371
++    dlat = math.radians(lat2 - lat1)
++    dlon = math.radians(lon2 - lon1)
++    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
++    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
++    return R * c
++
+ @app.get("/api/issues")
+-async def get_issues():
++async def get_issues(
++    lat: Optional[float] = Query(None),
++    lon: Optional[float] = Query(None),
++    radius: Optional[float] = Query(None)
++):
+     if not supabase:
+         raise HTTPException(status_code=500, detail="Supabase client not initialized")
+     try:
+@@ -261,6 +274,15 @@ async def get_issues():
+         # Map to what frontend expects
+         issues = []
+         for row in response.data:
++            i_lat = row.get("latitude")
++            i_lon = row.get("longitude")
++            
++            # Apply location filtering if parameters are provided
++            if lat is not None and lon is not None and radius is not None and i_lat is not None and i_lon is not None:
++                dist = calculate_distance(lat, lon, i_lat, i_lon)
++                if dist > radius:
++                    continue
++
+             issues.append({
+                 "id": row.get("id"),
+                 "title": f"Civic Issue #{row.get('id')}",
+@@ -268,8 +290,8 @@ async def get_issues():
+                 "category": row.get("issue_type", "General"),
+                 "votes": row.get("upvote_count", 0),
+                 "emergency": row.get("severity") in ["High", "Critical"],
+-                "latitude": row.get("latitude"),
+-                "longitude": row.get("longitude"),
++                "latitude": i_lat,
++                "longitude": i_lon,
+                 "status": str(row.get("status", "Pending")).title(),
+                 "date": row.get("created_at")[:10] if row.get("created_at") else "Recent",
+                 "ward": row.get("ward", "Unknown")
+
+commit 74c396d9391688728e276e05002448eaaa454976
+Author: Joshua Almeida <joshuaalmeida003@gmail.com>
+Date:   Sat Feb 28 18:32:02 2026 +0530
+
+    Stable app
+
+diff --git a/backend/main.py b/backend/main.py
+index bc76608..b55f63f 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -86,7 +86,12 @@ async def submit_issue(request: IssueSubmitRequest):
+     
+     try:
+         response = model.generate_content(extraction_prompt, generation_config={"response_mime_type": "application/json"})
+-        extracted_data = json.loads(response.text)
++        raw_text = response.text.strip()
++        if raw_text.startswith("```json"):
++            raw_text = raw_text[7:]
++        if raw_text.endswith("```"):
++            raw_text = raw_text[:-3]
++        extracted_data = json.loads(raw_text.strip())
+     except ResourceExhausted:
+         return {"error": "rate_limit", "message": "City servers busy, using fallback location."}
+     except Exception as e:
+@@ -309,7 +314,12 @@ async def parse_issue(request: ParseRequest):
+     """
+     try:
+         response = model.generate_content(extraction_prompt, generation_config={"response_mime_type": "application/json"})
+-        return json.loads(response.text)
++        raw_text = response.text.strip()
++        if raw_text.startswith("```json"):
++            raw_text = raw_text[7:]
++        if raw_text.endswith("```"):
++            raw_text = raw_text[:-3]
++        return json.loads(raw_text.strip())
+     except Exception as e:
+         raise HTTPException(status_code=500, detail=f"Failed to parse: {str(e)}")
+ 
+
+commit 75bb0ee5e86b6e3f1d1c5f154fa70acfef2c7dff
+Merge: e9eb22f a6ff582
+Author: Dev Dominic <223dev0039@dbit.in>
+Date:   Sat Feb 28 18:17:49 2026 +0530
+
+    Merge branch 'main' into backend-stable1
+
+commit e9eb22f6086eeeea93f2ade527fd1dc44d49e409
+Author: devdominic2004 <devdominic2004@gmail.com>
+Date:   Sat Feb 28 18:12:42 2026 +0530
+
+    backend-stable
+
+diff --git a/backend/main.py b/backend/main.py
+index 601b1c5..6df2fc5 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -5,6 +5,8 @@ from pydantic import BaseModel
+ from typing import Optional
+ from dotenv import load_dotenv
+ import google.generativeai as genai
++from google.generativeai.types import HarmCategory, HarmBlockThreshold
++from google.api_core.exceptions import ResourceExhausted
+ from supabase import create_client, Client
+ 
+ load_dotenv()
+@@ -23,8 +25,15 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and
+ # Initialize Gemini
+ if GEMINI_API_KEY:
+     genai.configure(api_key=GEMINI_API_KEY)
+-# Using gemini-2.5-flash for general fast generation
+-model = genai.GenerativeModel("gemini-2.5-flash")
++
++safety_settings = {
++    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
++    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
++    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
++    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
++}
++# Migrate to flash-lite for higher quota
++model = genai.GenerativeModel("gemini-2.5-flash-lite", safety_settings=safety_settings)
+ 
+ # Define Pydantic models for the request and response
+ class IssueSubmitRequest(BaseModel):
+@@ -63,6 +72,8 @@ async def submit_issue(request: IssueSubmitRequest):
+     try:
+         response = model.generate_content(extraction_prompt, generation_config={"response_mime_type": "application/json"})
+         extracted_data = json.loads(response.text)
++    except ResourceExhausted:
++        return {"error": "rate_limit", "message": "City servers busy, using fallback location."}
+     except Exception as e:
+         raise HTTPException(status_code=500, detail=f"Failed to process with Gemini: {str(e)}")
+         
+@@ -70,6 +81,14 @@ async def submit_issue(request: IssueSubmitRequest):
+     missing_location_in_text = extracted_data.get("missing_location", True)
+     has_gps = request.latitude is not None and request.longitude is not None
+     
++    # Vikhroli Fallback
++    if not has_gps:
++        ward = extracted_data.get("ward") or ""
++        if "vikhroli" in ward.lower() or "vikhroli" in request.description.lower():
++            request.latitude = 19.1075
++            request.longitude = 72.9372
++            has_gps = True
++    
+     if missing_location_in_text and not has_gps:
+         # Generate a targeted follow-up question
+         question_prompt = f"""
+@@ -83,16 +102,27 @@ async def submit_issue(request: IssueSubmitRequest):
+             "question": q_response.text.strip()
+         }
+         
+-    # Step 3: Vectorize the complaint description
++    # Step 3: Resolve Embeddings - Check DB first to avoid duplicate API Calls
++    embedding = None
+     try:
+-        embedding_result = genai.embed_content(
+-            model="models/gemini-embedding-001",
+-            content=request.description,
+-            task_type="retrieval_document"
+-        )
+-        embedding = embedding_result['embedding']
++        existing = supabase.table("complaints").select("embedding").eq("description", request.description).limit(1).execute()
++        if existing.data and len(existing.data) > 0:
++            embedding = existing.data[0]["embedding"]
+     except Exception as e:
+-        raise HTTPException(status_code=500, detail=f"Failed to generate embedding: {str(e)}")
++        print(f"Warning: Failed to query existing embeddings: {e}")
++        
++    if not embedding:
++        try:
++            embedding_result = genai.embed_content(
++                model="models/gemini-embedding-001",
++                content=request.description,
++                task_type="retrieval_document"
++            )
++            embedding = embedding_result['embedding']
++        except ResourceExhausted:
++            return {"error": "rate_limit", "message": "City servers busy, using fallback location."}
++        except Exception as e:
++            raise HTTPException(status_code=500, detail=f"Failed to generate embedding: {str(e)}")
+         
+     # Step 4: Semantic Deduplication using Supabase RPC
+     try:
+@@ -201,6 +231,48 @@ async def parse_circular(file: UploadFile = File(...)):
+     except Exception as e:
+         raise HTTPException(status_code=500, detail=f"Failed to parse circular: {str(e)}")
+ 
++@app.get("/issues")
++async def get_issues():
++    if not supabase:
++        raise HTTPException(status_code=500, detail="Supabase client not initialized")
++    try:
++        response = supabase.table("complaints").select("id, description, issue_type, severity, ward, latitude, longitude, upvote_count, status, created_at").order("created_at", desc=True).execute()
++        
++        # Map to what frontend expects
++        issues = []
++        for row in response.data:
++            issues.append({
++                "id": row.get("id"),
++                "description": row.get("description"),
++                "category": row.get("issue_type", "General"),
++                "votes": row.get("upvote_count", 0),
++                "emergency": row.get("severity") in ["High", "Critical"],
++                "latitude": row.get("latitude"),
++                "longitude": row.get("longitude")
++            })
++        return issues
++    except Exception as e:
++        raise HTTPException(status_code=500, detail=f"Failed to fetch issues: {str(e)}")
++
++@app.post("/vote/{issue_id}")
++async def vote_issue(issue_id: int):
++    # Modified to not require user_id since frontend just calls it without body
++    if not supabase:
++        raise HTTPException(status_code=500, detail="Supabase client not initialized")
++    try:
++        res = supabase.table("complaints").select("upvote_count").eq("id", issue_id).execute()
++        if not res.data:
++            raise HTTPException(status_code=404, detail="Issue not found")
++            
++        current_count = res.data[0]["upvote_count"]
++        # Just incrementing directly for simplicity since frontend removed the toggle logic body
++        new_count = current_count + 1
++        supabase.table("complaints").update({"upvote_count": new_count}).eq("id", issue_id).execute()
++        return {"status": "success", "new_count": new_count}
++            
++    except Exception as e:
++        raise HTTPException(status_code=500, detail=f"Failed to upvote: {str(e)}")
++
+ @app.get("/")
+ def root():
+     return {"message": "Welcome to the Vox Backend API!"}
+
+commit a6ff58238bf16aad2adf6a7e8cac579045f154d7
+Author: Joshua Almeida <joshuaalmeida003@gmail.com>
+Date:   Sat Feb 28 17:55:51 2026 +0530
+
+    frontend updated
+
+diff --git a/backend/main.py b/backend/main.py
+index 4f93a9d..289d4d5 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -1,11 +1,14 @@
+ import os
+ import json
+ from fastapi import FastAPI, UploadFile, File, HTTPException
++from fastapi.responses import StreamingResponse
+ from pydantic import BaseModel
++import io
+ from typing import Optional
+ from dotenv import load_dotenv
+ import google.generativeai as genai
+ from supabase import create_client, Client
++from fpdf import FPDF
+ 
+ load_dotenv()
+ 
+@@ -33,6 +36,18 @@ class IssueSubmitRequest(BaseModel):
+     longitude: Optional[float] = None
+     image_url: Optional[str] = None
+ 
++class CheckDuplicateRequest(BaseModel):
++    description: str
++    latitude: Optional[float] = None
++    longitude: Optional[float] = None
++
++class GeneratePDFRequest(BaseModel):
++    name: str
++    phone: str
++    description: str
++    category: str
++    location: str
++
+ app = FastAPI(title="Vox Backend", description="Vox civic grievance platform backend API")
+ 
+ @app.post("/api/submit-issue")
+@@ -213,12 +228,16 @@ async def get_issues():
+         for row in response.data:
+             issues.append({
+                 "id": row.get("id"),
++                "title": f"Civic Issue #{row.get('id')}",
+                 "description": row.get("description"),
+                 "category": row.get("issue_type", "General"),
+                 "votes": row.get("upvote_count", 0),
+                 "emergency": row.get("severity") in ["High", "Critical"],
+                 "latitude": row.get("latitude"),
+-                "longitude": row.get("longitude")
++                "longitude": row.get("longitude"),
++                "status": str(row.get("status", "Pending")).title(),
++                "date": row.get("created_at")[:10] if row.get("created_at") else "Recent",
++                "ward": row.get("ward", "Unknown")
+             })
+         return issues
+     except Exception as e:
+@@ -264,6 +283,171 @@ async def parse_issue(request: ParseRequest):
+     except Exception as e:
+         raise HTTPException(status_code=500, detail=f"Failed to parse: {str(e)}")
+ 
++@app.post("/api/check_duplicate")
++async def check_duplicate(request: CheckDuplicateRequest):
++    if not supabase:
++        raise HTTPException(status_code=500, detail="Supabase client not initialized")
++        
++    has_gps = request.latitude is not None and request.longitude is not None
++    
++    try:
++        # 1. Embed description
++        embedding_result = genai.embed_content(
++            model="models/gemini-embedding-001",
++            content=request.description,
++            task_type="retrieval_document"
++        )
++        embedding = embedding_result['embedding']
++        
++        # 2. Search Supabase
++        rpc_params = {
++            "query_embedding": embedding,
++            "match_threshold": 0.90, # 90% strict similarity
++            "match_count": 1,
++            "loc_lat": request.latitude,
++            "loc_long": request.longitude,
++            "radius_meters": 100.0 if has_gps else None
++        }
++        
++        match_response = supabase.rpc("match_complaints", rpc_params).execute()
++        matches = match_response.data
++        
++        if matches and len(matches) > 0:
++            existing_issue = matches[0]
++            # Calculate rough distance if GPS exists
++            distance = 0
++            if has_gps and existing_issue.get("latitude") and existing_issue.get("longitude"):
++                 # Haversine approximation or just return a static placeholder since rpc handles the 100m radius natively
++                 distance = 50 
++            
++            return {
++                "duplicate": True,
++                "issue_id": existing_issue["id"],
++                "description": existing_issue["description"],
++                "votes": existing_issue["upvote_count"],
++                "distance": distance
++            }
++            
++        return {"duplicate": False}
++        
++    except Exception as e:
++        print(f"Duplicate check error: {e}")
++        return {"duplicate": False}
++
++@app.post("/api/generate_pdf")
++async def generate_pdf(request: GeneratePDFRequest):
++    pdf = FPDF()
++    pdf.add_page()
++    pdf.set_font("Arial", size=12)
++    
++    # Header
++    pdf.set_font("Arial", 'B', 16)
++    pdf.cell(200, 10, txt="Official Civic Grievance Complaint", ln=1, align='C')
++    pdf.ln(10)
++    
++    # Body
++    pdf.set_font("Arial", size=12)
++    pdf.cell(200, 10, txt=f"Reporting Citizen: {request.name}", ln=1)
++    pdf.cell(200, 10, txt=f"Contact Phone: {request.phone}", ln=1)
++    pdf.ln(5)
++    
++    pdf.set_font("Arial", 'B', 12)
++    pdf.cell(200, 10, txt="Incident Details:", ln=1)
++    pdf.set_font("Arial", size=12)
++    pdf.cell(200, 10, txt=f"Category: {request.category}", ln=1)
++    pdf.cell(200, 10, txt=f"Location: {request.location}", ln=1)
++    pdf.ln(5)
++    
++    pdf.set_font("Arial", 'B', 12)
++    pdf.cell(200, 10, txt="Description:", ln=1)
++    pdf.set_font("Arial", size=12)
++    pdf.multi_cell(0, 10, txt=request.description)
++    
++    pdf.ln(20)
++    pdf.cell(200, 10, txt="Generated automatically by the CivicSense framework.", ln=1, align='C')
++
++    # Output to stream
++    pdf_bytes = pdf.output(dest="S").encode("latin-1")
++    
++    return StreamingResponse(
++        io.BytesIO(pdf_bytes), 
++        media_type="application/pdf", 
++        headers={"Content-Disposition": f"attachment; filename=complaint.pdf"}
++    )
++
++@app.get("/api/dashboard_stats")
++async def get_dashboard_stats():
++    if not supabase: return {}
++    res = supabase.table("complaints").select("id, status, severity").execute()
++    total = len(res.data)
++    active = sum(1 for r in res.data if r.get("status", "").lower() in ["pending", "in progress"])
++    resolved = sum(1 for r in res.data if r.get("status", "").lower() == "resolved")
++    emergency = sum(1 for r in res.data if r.get("severity", "").lower() in ["high", "critical"])
++    return {"total": total, "active": active, "resolved": resolved, "emergency": emergency}
++
++@app.get("/api/insights")
++async def get_insights():
++    if not supabase: return {}
++    res = supabase.table("complaints").select("issue_type, ward").execute()
++    counts = {}
++    ward_counts = {}
++    for r in res.data:
++        cat = r.get("issue_type")
++        if cat: counts[cat] = counts.get(cat, 0) + 1
++        w = r.get("ward")
++        if w: ward_counts[w] = ward_counts.get(w, 0) + 1
++        
++    top_cat = max(counts, key=counts.get) if counts else "N/A"
++    top_ward = max(ward_counts, key=ward_counts.get) if ward_counts else "General"
++    
++    return {
++        "top_category": top_cat,
++        "top_ward": top_ward,
++        "trending": ["Pothole Hazards", "Monsoon Water Logging", "Uncollected Waste"]
++    }
++
++@app.get("/api/issues/{issue_id}")
++async def get_issue(issue_id: int):
++    if not supabase: raise HTTPException(status_code=500, detail="DB Error")
++    res = supabase.table("complaints").select("*").eq("id", issue_id).execute()
++    if not res.data: raise HTTPException(status_code=404, detail="Not Found")
++    row = res.data[0]
++    return {
++        "id": row.get("id"),
++        "title": f"{row.get('issue_type', 'General')} Issue",
++        "description": row.get("description"),
++        "category": row.get("issue_type", "General"),
++        "votes": row.get("upvote_count", 0),
++        "status": str(row.get("status", "Pending")).title(),
++        "date": row.get("created_at")[:10] if row.get("created_at") else "Recent",
++        "latitude": row.get("latitude"),
++        "longitude": row.get("longitude"),
++        "ward": row.get("ward", "Unknown")
++    }
++
++class CommentRequest(BaseModel):
++    name: str
++    text: str
++
++COMMENTS_DB = {}
++
++@app.post("/api/issues/{issue_id}/comments")
++async def add_comment(issue_id: int, request: CommentRequest):
++    if issue_id not in COMMENTS_DB:
++        COMMENTS_DB[issue_id] = []
++    
++    import datetime
++    new_comment = {"name": request.name, "text": request.text, "date": datetime.datetime.now().strftime("%I:%M %p")}
++    COMMENTS_DB[issue_id].append(new_comment)
++    return {"status": "success", "comment": new_comment}
++
++@app.get("/api/issues/{issue_id}/comments")
++async def get_comments(issue_id: int):
++    base_comments = [
++        {"name": "System", "text": "Issue logged and routed to concerned department.", "date": "System Log"}
++    ]
++    return base_comments + COMMENTS_DB.get(issue_id, [])
++
+ @app.get("/api/notices")
+ async def get_notices():
+     # Placeholder for notices, can be connected to DB later
+
+commit 0c1e236fd9d504680853a6d888da001216217d59
+Author: Joshua Almeida <joshuaalmeida003@gmail.com>
+Date:   Sat Feb 28 16:02:35 2026 +0530
+
+    frontend
+
+diff --git a/backend/main.py b/backend/main.py
+index 601b1c5..4f93a9d 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -201,6 +201,81 @@ async def parse_circular(file: UploadFile = File(...)):
+     except Exception as e:
+         raise HTTPException(status_code=500, detail=f"Failed to parse circular: {str(e)}")
+ 
++@app.get("/api/issues")
++async def get_issues():
++    if not supabase:
++        raise HTTPException(status_code=500, detail="Supabase client not initialized")
++    try:
++        response = supabase.table("complaints").select("id, description, issue_type, severity, ward, latitude, longitude, upvote_count, status, created_at").order("created_at", desc=True).execute()
++        
++        # Map to what frontend expects
++        issues = []
++        for row in response.data:
++            issues.append({
++                "id": row.get("id"),
++                "description": row.get("description"),
++                "category": row.get("issue_type", "General"),
++                "votes": row.get("upvote_count", 0),
++                "emergency": row.get("severity") in ["High", "Critical"],
++                "latitude": row.get("latitude"),
++                "longitude": row.get("longitude")
++            })
++        return issues
++    except Exception as e:
++        raise HTTPException(status_code=500, detail=f"Failed to fetch issues: {str(e)}")
++
++@app.post("/api/vote/{issue_id}")
++async def vote_issue(issue_id: int):
++    if not supabase:
++        raise HTTPException(status_code=500, detail="Supabase client not initialized")
++    try:
++        # Get current count
++        res = supabase.table("complaints").select("upvote_count").eq("id", issue_id).execute()
++        if not res.data:
++            raise HTTPException(status_code=404, detail="Issue not found")
++            
++        new_count = res.data[0]["upvote_count"] + 1
++        update_res = supabase.table("complaints").update({"upvote_count": new_count}).eq("id", issue_id).execute()
++        return {"status": "success", "new_count": new_count}
++    except Exception as e:
++        raise HTTPException(status_code=500, detail=f"Failed to vote: {str(e)}")
++
++class ParseRequest(BaseModel):
++    text: str
++
++@app.post("/api/parse_issue")
++async def parse_issue(request: ParseRequest):
++    extraction_prompt = f"""
++    Analyze the following issue description:
++    "{request.text}"
++    
++    1. Extract the 'category' (e.g., Pothole, Water Leak, Garbage, etc.).
++    2. Clean up the description.
++    
++    Return a strictly valid JSON block containing:
++    {{
++        "category": "string",
++        "description": "string"
++    }}
++    """
++    try:
++        response = model.generate_content(extraction_prompt, generation_config={"response_mime_type": "application/json"})
++        return json.loads(response.text)
++    except Exception as e:
++        raise HTTPException(status_code=500, detail=f"Failed to parse: {str(e)}")
++
++@app.get("/api/notices")
++async def get_notices():
++    # Placeholder for notices, can be connected to DB later
++    return [
++        {
++            "title": "Scheduled Water Cut in Ward A",
++            "summary": "There will be a scheduled water cut on Oct 12 due to pipeline maintenance.",
++            "source": "Municipal Corporation",
++            "date": "2023-10-10"
++        }
++    ]
++
+ @app.get("/")
+ def root():
+     return {"message": "Welcome to the Vox Backend API!"}
+
+commit be0ce457f2aa4ad012b39f6cbfecde164e294561
+Author: devdominic2004 <devdominic2004@gmail.com>
+Date:   Sat Feb 28 15:03:40 2026 +0530
+
+    fix: configuration of supabase
+
+diff --git a/backend/main.py b/backend/main.py
+index 4a060aa..601b1c5 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -86,7 +86,7 @@ async def submit_issue(request: IssueSubmitRequest):
+     # Step 3: Vectorize the complaint description
+     try:
+         embedding_result = genai.embed_content(
+-            model="models/text-embedding-004",
++            model="models/gemini-embedding-001",
+             content=request.description,
+             task_type="retrieval_document"
+         )
+
+commit fd82a8c43c9b4e88ff0938f62083093928f23dac
+Author: devdominic2004 <devdominic2004@gmail.com>
+Date:   Sat Feb 28 14:33:40 2026 +0530
+
+    Initial backend push
+
+diff --git a/backend/main.py b/backend/main.py
+new file mode 100644
+index 0000000..4a060aa
+--- /dev/null
++++ b/backend/main.py
+@@ -0,0 +1,210 @@
++import os
++import json
++from fastapi import FastAPI, UploadFile, File, HTTPException
++from pydantic import BaseModel
++from typing import Optional
++from dotenv import load_dotenv
++import google.generativeai as genai
++from supabase import create_client, Client
++
++load_dotenv()
++
++# Configure environment variables
++GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
++SUPABASE_URL = os.getenv("SUPABASE_URL")
++SUPABASE_KEY = os.getenv("SUPABASE_KEY")
++
++if not GEMINI_API_KEY or not SUPABASE_URL or not SUPABASE_KEY:
++    print("Warning: Missing required environment variables. Please check your .env file.")
++
++# Initialize Supabase client
++supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
++
++# Initialize Gemini
++if GEMINI_API_KEY:
++    genai.configure(api_key=GEMINI_API_KEY)
++# Using gemini-2.5-flash for general fast generation
++model = genai.GenerativeModel("gemini-2.5-flash")
++
++# Define Pydantic models for the request and response
++class IssueSubmitRequest(BaseModel):
++    description: str
++    latitude: Optional[float] = None
++    longitude: Optional[float] = None
++    image_url: Optional[str] = None
++
++app = FastAPI(title="Vox Backend", description="Vox civic grievance platform backend API")
++
++@app.post("/api/submit-issue")
++async def submit_issue(request: IssueSubmitRequest):
++    if not supabase:
++        raise HTTPException(status_code=500, detail="Supabase client not initialized")
++        
++    # Step 1: Use Gemini to extract issue details and check for missing location info
++    extraction_prompt = f"""
++    You are an AI assistant for a civic grievance platform called "Vox".
++    Analyze the following issue description:
++    "{request.description}"
++    
++    1. Extract the 'issue_type' (e.g., Pothole, Water Leak, Garbage, etc.).
++    2. Extract the 'severity' (Low, Medium, High, Critical).
++    3. Extract the 'ward' or specific location area if mentioned.
++    4. Determine if sufficient location context is present in the description.
++    
++    Return a strictly valid JSON block containing:
++    {{
++        "issue_type": "string",
++        "severity": "string",
++        "ward": "string or null",
++        "missing_location": boolean
++    }}
++    """
++    
++    try:
++        response = model.generate_content(extraction_prompt, generation_config={"response_mime_type": "application/json"})
++        extracted_data = json.loads(response.text)
++    except Exception as e:
++        raise HTTPException(status_code=500, detail=f"Failed to process with Gemini: {str(e)}")
++        
++    # Step 2: Ensure we have location data
++    missing_location_in_text = extracted_data.get("missing_location", True)
++    has_gps = request.latitude is not None and request.longitude is not None
++    
++    if missing_location_in_text and not has_gps:
++        # Generate a targeted follow-up question
++        question_prompt = f"""
++        The user reported an issue: "{request.description}".
++        We don't have GPS coordinates, and the description lacks a specific location (like a street name, landmark, or ward).
++        Ask a very brief, polite question to find out exactly where this problem is located.
++        """
++        q_response = model.generate_content(question_prompt)
++        return {
++            "status": "incomplete",
++            "question": q_response.text.strip()
++        }
++        
++    # Step 3: Vectorize the complaint description
++    try:
++        embedding_result = genai.embed_content(
++            model="models/text-embedding-004",
++            content=request.description,
++            task_type="retrieval_document"
++        )
++        embedding = embedding_result['embedding']
++    except Exception as e:
++        raise HTTPException(status_code=500, detail=f"Failed to generate embedding: {str(e)}")
++        
++    # Step 4: Semantic Deduplication using Supabase RPC
++    try:
++        # Call the match_complaints RPC function
++        # Using a 90% cosine similarity threshold (0.90) and 100m radius if GPS is present
++        rpc_params = {
++            "query_embedding": embedding,
++            "match_threshold": 0.90,
++            "match_count": 1,
++            "loc_lat": request.latitude,
++            "loc_long": request.longitude,
++            "radius_meters": 100.0 if has_gps else None
++        }
++        
++        match_response = supabase.rpc("match_complaints", rpc_params).execute()
++        matches = match_response.data
++        
++        if matches and len(matches) > 0:
++            existing_issue = matches[0]
++            # Increment upvote count
++            new_count = existing_issue["upvote_count"] + 1
++            update_res = supabase.table("complaints").update({"upvote_count": new_count}).eq("id", existing_issue["id"]).execute()
++            
++            return {
++                "status": "success",
++                "action": "deduplicated",
++                "message": "A similar issue was found nearby. We have upvoted the existing complaint.",
++                "data": update_res.data[0] if update_res.data else None
++            }
++            
++    except Exception as e:
++        print(f"Deduplication step warning: {str(e)}")
++        # Continue to insert if deduplication fails rather than failing the whole request
++        
++    # Step 5: Insert new complaint
++    try:
++        new_complaint = {
++            "description": request.description,
++            "issue_type": extracted_data.get("issue_type"),
++            "severity": extracted_data.get("severity"),
++            "ward": extracted_data.get("ward"),
++            "latitude": request.latitude,
++            "longitude": request.longitude,
++            "image_url": request.image_url,
++            "embedding": embedding,
++            "upvote_count": 1,
++            "status": "pending"
++        }
++        
++        insert_response = supabase.table("complaints").insert(new_complaint).execute()
++        
++        return {
++            "status": "success",
++            "action": "created",
++            "message": "New complaint successfully registered.",
++            "data": insert_response.data[0] if insert_response.data else None
++        }
++    except Exception as e:
++        raise HTTPException(status_code=500, detail=f"Failed to save complaint to database: {str(e)}")
++
++@app.post("/api/parse-circular")
++async def parse_circular(file: UploadFile = File(...)):
++    if not file.filename.endswith(".pdf"):
++        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
++        
++    try:
++        # Read the file bytes
++        file_bytes = await file.read()
++        
++        # Pass the bytes directly to Gemini 
++        pdf_part = {
++            "mime_type": "application/pdf",
++            "data": file_bytes
++        }
++        
++        prompt = """
++        Read the attached Marathi municipal circular.
++        Translate it into English and extract the following details:
++        - Affected Wards (if mentioned, otherwise null)
++        - Dates (start and end dates of the inconvenience, or single dates)
++        - Inconvenience Type (e.g., Water Cut, Road Closure, Power Outage, etc.)
++        
++        Return the result as a strictly valid JSON array of objects.
++        Format:
++        [
++            {
++                "wards": ["Ward A", "Ward B"],
++                "dates": "Oct 12 to Oct 14",
++                "inconvenience_type": "Water Cut",
++                "summary": "Brief English summary of the circular"
++            }
++        ]
++        """
++        
++        response = model.generate_content(
++            [pdf_part, prompt],
++            generation_config={"response_mime_type": "application/json"}
++        )
++        
++        extracted_data = json.loads(response.text)
++        return {
++            "status": "success",
++            "data": extracted_data
++        }
++        
++    except Exception as e:
++        raise HTTPException(status_code=500, detail=f"Failed to parse circular: {str(e)}")
++
++@app.get("/")
++def root():
++    return {"message": "Welcome to the Vox Backend API!"}
++
++if __name__ == "__main__":
++    import uvicorn
++    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

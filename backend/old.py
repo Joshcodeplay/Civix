@@ -1,7 +1,6 @@
 import os
 import json
-import math
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import io
@@ -45,8 +44,6 @@ class IssueSubmitRequest(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     image_url: Optional[str] = None
-    reporter_name: Optional[str] = None
-    reporter_phone: Optional[str] = None
 
 class CheckDuplicateRequest(BaseModel):
     description: str
@@ -59,27 +56,6 @@ class GeneratePDFRequest(BaseModel):
     description: str
     category: str
     location: str
-
-class SOSRequest(BaseModel):
-    description: str
-    latitude: float
-    longitude: float
-
-class AuthorityRequest(BaseModel):
-    description: str
-    category: str
-    location: str
-
-class EvidencePDFRequest(BaseModel):
-    name: str
-    phone: str
-    description: str
-    category: str
-    location: str
-    latitude: float
-    longitude: float
-    votes: int = 1
-    authority: str = "Pending Authority Allocation"
 
 app = FastAPI(title="Vox Backend", description="Vox civic grievance platform backend API")
 
@@ -211,8 +187,6 @@ async def submit_issue(request: IssueSubmitRequest):
             "latitude": request.latitude,
             "longitude": request.longitude,
             "image_url": request.image_url,
-            "reporter_name": request.reporter_name,
-            "reporter_phone": request.reporter_phone,
             "embedding": embedding,
             "upvote_count": 1,
             "status": "pending"
@@ -228,181 +202,6 @@ async def submit_issue(request: IssueSubmitRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save complaint to database: {str(e)}")
-
-@app.post("/api/sos")
-async def report_sos(request: SOSRequest):
-    if not supabase:
-        raise HTTPException(status_code=500, detail="Supabase client not initialized")
-        
-    try:
-        new_sos = {
-            "description": f"SOS EMERGENCY: {request.description}",
-            "issue_type": "SOS Emergency",
-            "severity": "Critical",
-            "latitude": request.latitude,
-            "longitude": request.longitude,
-            "status": "pending",
-            "upvote_count": 999  # Give it high priority
-        }
-        
-        insert_response = supabase.table("complaints").insert(new_sos).execute()
-        
-        return {
-            "status": "success",
-            "message": "SOS alert broadcasted to nearby users.",
-            "data": insert_response.data[0] if insert_response.data else None
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to broadcast SOS: {str(e)}")
-
-@app.post("/api/report_issue")
-async def report_issue(
-    description: str = Form(...),
-    category: str = Form("General"),
-    latitude: float = Form(0.0),
-    longitude: float = Form(0.0),
-    reporter_name: str = Form(""),
-    reporter_phone: str = Form(""),
-    emergency: bool = Form(False),
-    photo: Optional[UploadFile] = File(None)
-):
-    if not supabase:
-        raise HTTPException(status_code=500, detail="Supabase not configured")
-        
-    import base64
-    image_base64 = None
-    if photo:
-        contents = await photo.read()
-        b64_str = base64.b64encode(contents).decode('utf-8')
-        image_base64 = f"data:{photo.content_type};base64,{b64_str}"
-
-    embedding = None
-    try:
-        # Check DB first for exact description match to avoid extra API calls
-        existing = supabase.table("complaints").select("embedding").eq("description", description).limit(1).execute()
-        if existing.data and len(existing.data) > 0:
-            embedding = existing.data[0]["embedding"]
-    except Exception as e:
-        print(f"Warning: Failed to query existing embeddings: {e}")
-        
-    if not embedding:
-        try:
-            embedding_result = genai.embed_content(
-                model="models/gemini-embedding-001",
-                content=description,
-                task_type="retrieval_document"
-            )
-            embedding = embedding_result['embedding']
-        except Exception as e:
-            print(f"Embedding error: {e}")
-
-    has_gps = latitude != 0.0 and longitude != 0.0
-    if embedding and has_gps:
-        try:
-            rpc_params = {
-                "query_embedding": embedding,
-                "match_threshold": 0.90,
-                "match_count": 1,
-                "loc_lat": latitude,
-                "loc_long": longitude,
-                "radius_meters": 100.0
-            }
-            
-            match_response = supabase.rpc("match_complaints", rpc_params).execute()
-            if match_response.data and len(match_response.data) > 0:
-                existing_issue = match_response.data[0]
-                new_count = existing_issue["upvote_count"] + 1
-                update_res = supabase.table("complaints").update({"upvote_count": new_count}).eq("id", existing_issue["id"]).execute()
-                
-                return {
-                    "status": "success",
-                    "action": "deduplicated",
-                    "message": "A similar issue was found nearby. We have upvoted the existing complaint instead of creating a duplicate.",
-                    "data": update_res.data[0] if update_res.data else None
-                }
-        except Exception as e:
-            print(f"Deduplication step warning: {str(e)}")
-
-    severity = "Critical" if emergency else "Medium"
-    
-    new_complaint = {
-        "description": description,
-        "issue_type": category,
-        "severity": severity,
-        "latitude": latitude,
-        "longitude": longitude,
-        "image_url": image_base64,
-        "reporter_name": reporter_name,
-        "reporter_phone": reporter_phone,
-        "embedding": embedding,
-        "upvote_count": 1,
-        "status": "pending"
-    }
-    
-    try:
-        res = supabase.table("complaints").insert(new_complaint).execute()
-        return {"status": "success", "data": res.data[0] if res.data else None}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create report: {str(e)}")
-
-@app.post("/api/responsible_authority")
-async def get_responsible_authority(request: AuthorityRequest):
-    prompt = f"""
-    Given this civic issue:
-    Category: {request.category}
-    Location: {request.location}
-    Description: {request.description}
-    
-    Identify the specific municipal authority or department responsible for fixing this in Mumbai (e.g., BMC Solid Waste Management, BEST Undertaking, etc.).
-    Also estimate an expected resolution time based on typical SLAs.
-    
-    Return strictly JSON:
-    {{
-        "authority": "string name",
-        "department": "string department",
-        "expected_time": "string (e.g. '3-5 days')"
-    }}
-    """
-    try:
-        response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
-        raw = response.text.strip()
-        if raw.startswith("```json"): raw = raw[7:]
-        if raw.endswith("```"): raw = raw[:-3]
-        return json.loads(raw.strip())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/active-sos")
-async def get_active_sos(
-    lat: float = Query(...),
-    lon: float = Query(...),
-    radius: float = Query(5.0)  # Default 5km radius
-):
-    if not supabase:
-        raise HTTPException(status_code=500, detail="Supabase client not initialized")
-        
-    try:
-        # Get pending SOS emergencies
-        response = supabase.table("complaints").select("id, description, latitude, longitude, created_at").eq("status", "pending").eq("issue_type", "SOS Emergency").order("created_at", desc=True).execute()
-        
-        active_alerts = []
-        for row in response.data:
-            i_lat = row.get("latitude")
-            i_lon = row.get("longitude")
-            
-            if i_lat is not None and i_lon is not None:
-                dist = calculate_distance(lat, lon, i_lat, i_lon)
-                if dist <= radius:
-                    active_alerts.append({
-                        "id": row.get("id"),
-                        "description": row.get("description").replace("SOS EMERGENCY: ", ""),
-                        "distance_km": round(dist, 2),
-                        "time": row.get("created_at")[:16].replace("T", " ") if row.get("created_at") else "Just now"
-                    })
-                    
-        return {"alerts": active_alerts}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch SOS alerts: {str(e)}")
 
 @app.post("/api/parse-circular")
 async def parse_circular(file: UploadFile = File(...)):
@@ -452,37 +251,16 @@ async def parse_circular(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse circular: {str(e)}")
 
-def calculate_distance(lat1, lon1, lat2, lon2):
-    R = 6371
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-    return R * c
-
 @app.get("/api/issues")
-async def get_issues(
-    lat: Optional[float] = Query(None),
-    lon: Optional[float] = Query(None),
-    radius: Optional[float] = Query(None)
-):
+async def get_issues():
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase client not initialized")
     try:
-        response = supabase.table("complaints").select("id, description, issue_type, severity, ward, latitude, longitude, upvote_count, status, created_at, image_url").order("created_at", desc=True).execute()
+        response = supabase.table("complaints").select("id, description, issue_type, severity, ward, latitude, longitude, upvote_count, status, created_at").order("created_at", desc=True).execute()
         
         # Map to what frontend expects
         issues = []
         for row in response.data:
-            i_lat = row.get("latitude")
-            i_lon = row.get("longitude")
-            
-            # Apply location filtering if parameters are provided
-            if lat is not None and lon is not None and radius is not None and i_lat is not None and i_lon is not None:
-                dist = calculate_distance(lat, lon, i_lat, i_lon)
-                if dist > radius:
-                    continue
-
             issues.append({
                 "id": row.get("id"),
                 "title": f"Civic Issue #{row.get('id')}",
@@ -490,12 +268,11 @@ async def get_issues(
                 "category": row.get("issue_type", "General"),
                 "votes": row.get("upvote_count", 0),
                 "emergency": row.get("severity") in ["High", "Critical"],
-                "latitude": i_lat,
-                "longitude": i_lon,
+                "latitude": row.get("latitude"),
+                "longitude": row.get("longitude"),
                 "status": str(row.get("status", "Pending")).title(),
                 "date": row.get("created_at")[:10] if row.get("created_at") else "Recent",
-                "ward": row.get("ward", "Unknown"),
-                "image_url": row.get("image_url")
+                "ward": row.get("ward", "Unknown")
             })
         return issues
     except Exception as e:
@@ -638,53 +415,6 @@ async def generate_pdf(request: GeneratePDFRequest):
         headers={"Content-Disposition": f"attachment; filename=complaint.pdf"}
     )
 
-@app.post("/api/generate_evidence_pdf")
-async def generate_evidence_pdf(request: EvidencePDFRequest):
-    pdf = FPDF()
-    pdf.add_page()
-    
-    # Title
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(200, 10, txt="Citizen Evidence Report", ln=1, align='C')
-    pdf.ln(10)
-    
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(200, 10, txt="Reporter Details:", ln=1)
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, txt=f"Name: {request.name}", ln=1)
-    pdf.cell(200, 10, txt=f"Phone: {request.phone}", ln=1)
-    pdf.ln(5)
-    
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(200, 10, txt="Issue Details:", ln=1)
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, txt=f"Category: {request.category}", ln=1)
-    pdf.cell(200, 10, txt=f"Location: {request.location}", ln=1)
-    pdf.cell(200, 10, txt=f"Coordinates: {request.latitude}, {request.longitude}", ln=1)
-    pdf.cell(200, 10, txt=f"Responsible Authority: {request.authority}", ln=1)
-    pdf.cell(200, 10, txt=f"Community Votes: {request.votes}", ln=1)
-    
-    import datetime
-    pdf.cell(200, 10, txt=f"Date Reported: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=1)
-    pdf.ln(5)
-    
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(200, 10, txt="Description / Generated Complaint Letter:", ln=1)
-    pdf.set_font("Arial", size=12)
-    pdf.multi_cell(0, 10, txt=request.description)
-    
-    pdf.ln(20)
-    pdf.cell(200, 10, txt="Generated automatically by the CivicSense framework.", ln=1, align='C')
-
-    # Output to stream
-    pdf_bytes = pdf.output(dest="S").encode("latin-1")
-    
-    return StreamingResponse(
-        io.BytesIO(pdf_bytes), 
-        media_type="application/pdf", 
-        headers={"Content-Disposition": f"attachment; filename=evidence_report.pdf"}
-    )
-
 @app.get("/api/dashboard_stats")
 async def get_dashboard_stats():
     if not supabase: return {"total": 0, "active": 0, "resolved": 0, "emergency": 0}
@@ -694,54 +424,6 @@ async def get_dashboard_stats():
     resolved = sum(1 for r in res.data if r.get("status", "").lower() == "resolved")
     emergency = sum(1 for r in res.data if r.get("severity", "").lower() in ["high", "critical"])
     return {"total": total, "active": active, "resolved": resolved, "emergency": emergency}
-
-class StatusUpdateRequest(BaseModel):
-    status: str
-
-@app.patch("/api/admin/update-status/{issue_id}")
-async def update_issue_status(issue_id: int, request: StatusUpdateRequest):
-    if not supabase:
-        raise HTTPException(status_code=500, detail="Supabase client not initialized")
-    valid_statuses = ["Pending", "In Progress", "Resolved", "Closed"]
-    if request.status not in valid_statuses:
-        raise HTTPException(status_code=400, detail="Invalid status")
-    try:
-        res = supabase.table("complaints").update({"status": request.status}).eq("id", issue_id).execute()
-        if not res.data:
-            raise HTTPException(status_code=404, detail="Issue not found")
-        return {"status": "success", "data": res.data[0]}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/admin/stats")
-async def get_admin_stats():
-    if not supabase:
-        raise HTTPException(status_code=500, detail="Supabase client not initialized")
-    try:
-        # Get all complaints to aggregate
-        res = supabase.table("complaints").select("id, status, severity, issue_type, ward, latitude, longitude, upvote_count, description, created_at, reporter_name, reporter_phone, image_url").execute()
-        
-        complaints = res.data
-        total_complaints = len(complaints)
-        
-        # Aggregate by category
-        categories = {}
-        for c in complaints:
-            cat = c.get("issue_type") or "Unknown"
-            categories[cat] = categories.get(cat, 0) + 1
-            
-        # Get top 5 most upvoted unresolved complaints
-        active_complaints = [c for c in complaints if c.get("status", "").lower() not in ["resolved", "closed"]]
-        top_priority = sorted(active_complaints, key=lambda x: x.get("upvote_count", 0), reverse=True)[:5]
-        
-        return {
-            "total_complaints": total_complaints,
-            "category_counts": categories,
-            "top_priority": top_priority,
-            "all_complaints": complaints
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/insights")
 async def get_insights():
@@ -780,8 +462,7 @@ async def get_issue(issue_id: int):
         "date": row.get("created_at")[:10] if row.get("created_at") else "Recent",
         "latitude": row.get("latitude"),
         "longitude": row.get("longitude"),
-        "ward": row.get("ward", "Unknown"),
-        "image_url": row.get("image_url")
+        "ward": row.get("ward", "Unknown")
     }
 
 class CommentRequest(BaseModel):
