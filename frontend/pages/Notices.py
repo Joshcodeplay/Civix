@@ -21,7 +21,7 @@ model = genai.GenerativeModel("gemini-2.5-flash")
 apply_custom_css()
 render_nav()
 
-st.title("🏛️ Civic Bulletins & Notices")
+st.title("Civic Bulletins & Notices")
 st.markdown("<p style='color:#64748b;'>Stay updated with official infrastructure announcements, traffic advisories, and public notices securely fetched directly from municipal portals.</p>", unsafe_allow_html=True)
 st.divider()
 
@@ -148,7 +148,7 @@ if not notices:
     st.error("Unable to load government notices at this time.")
 else:
     cats = ["Road Works", "Water Notices", "Traffic", "Electricity"]
-    tabs = st.tabs([f"🚧 {cats[0]}", f"💧 {cats[1]}", f"🚦 {cats[2]}", f"⚡ {cats[3]}"])
+    tabs = st.tabs([f"{cats[0]}", f"{cats[1]}", f"{cats[2]}", f"{cats[3]}"])
     
     for i, category in enumerate(cats):
         with tabs[i]:
@@ -174,12 +174,12 @@ else:
                     f"<div class=\"issues-card\" style=\"border-left: 4px solid #3b82f6; margin-bottom:1rem;\">\n"
                     f"<h3 style=\"margin-top: 0; margin-bottom: 0.5rem; color: #1e293b;\">{title}</h3>\n"
                     f"<div style=\"display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 1rem; font-size: 0.85rem; color: #64748b; background-color: #f1f5f9; padding: 10px; border-radius: 6px;\">\n"
-                    f"<span style=\"white-space: nowrap;\">🏛️ <strong>{source}</strong></span>\n"
-                    f"<span style=\"white-space: nowrap;\">📅 <strong>{date}</strong></span>\n"
-                    f"<span style=\"white-space: nowrap;\">📍 <strong>{area}</strong></span>\n"
+                    f"<span style=\"white-space: nowrap;\"><strong>{source}</strong></span>\n"
+                    f"<span style=\"white-space: nowrap;\"><strong>{date}</strong></span>\n"
+                    f"<span style=\"white-space: nowrap;\"><strong>{area}</strong></span>\n"
                     f"</div>\n"
                     f"<p style=\"color: #334155; line-height: 1.6; margin-bottom: 1.2rem; font-size: 0.95rem;\">{summary}</p>\n"
-                    f"<a href=\"{url}\" target=\"_blank\" style=\"text-decoration:none;\"><button class=\"stButton\" style=\"padding: 0.4rem 1rem; border-radius: 6px; border: 1px solid #cbd5e1; background-color: white; color: #334155; font-weight: 500; cursor: pointer; transition: all 0.2s;\">📄 View Official PDF</button></a>\n"
+                    f"<a href=\"{url}\" target=\"_blank\" style=\"text-decoration:none;\"><button class=\"stButton\" style=\"padding: 0.4rem 1rem; border-radius: 6px; border: 1px solid #cbd5e1; background-color: white; color: #334155; font-weight: 500; cursor: pointer; transition: all 0.2s;\">View Official PDF</button></a>\n"
                     f"</div>\n"
                     )
                     st.markdown(html_card, unsafe_allow_html=True)

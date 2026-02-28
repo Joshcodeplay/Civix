@@ -14,14 +14,6 @@ def apply_custom_css(home=True):
 
         background-color: {"#0B0F14" if home else "#F8FAFC"};
 
-        background-image:
-        radial-gradient(circle at 1px 1px,
-        {"rgba(255,255,255,0.6)" if home else "rgba(0,0,0,0.15)"} 1px,
-        transparent 0);
-
-        background-size: 28px 28px;
-
-        background-attachment: fixed;
     }}
 
 
@@ -76,11 +68,11 @@ def apply_custom_css(home=True):
     section.main > div {{
 
         background:
-        {"rgba(15,23,42,0.75)" if home else "rgba(255,255,255,0.95)"};
+        {"#12161A" if home else "#FFFFFF"};
 
-        backdrop-filter: blur(8px);
+        border: {"1px solid #1E293B" if home else "1px solid #E2E8F0"};
 
-        border-radius:20px;
+        border-radius:12px;
 
         padding:2rem;
 
@@ -123,29 +115,28 @@ def apply_custom_css(home=True):
     .issues-card {{
 
         background:
-        {"rgba(30,41,59,0.75)" if home else "white"};
+        {"#1E293B" if home else "white"};
 
-        border-radius:18px;
+        border-radius:12px;
 
-        padding:1.7rem;
+        padding:1.5rem;
 
         margin-bottom:1.5rem;
 
         border:
-        {"1px solid rgba(255,255,255,0.1)" if home else "1px solid #E2E8F0"};
+        {"1px solid #334155" if home else "1px solid #E2E8F0"};
 
-        box-shadow:
-        {"0px 20px 40px rgba(0,0,0,0.5)" if home else "0px 15px 30px rgba(0,0,0,0.08)"};
+        box-shadow: none;
 
-        transition:0.3s;
+        transition:0.2s;
     }}
 
 
     .issues-card:hover {{
 
-        transform:translateY(-6px);
+        transform:translateY(-2px);
 
-        box-shadow:0px 30px 60px rgba(0,0,0,0.4);
+        box-shadow: {"0px 4px 12px rgba(0,0,0,0.2)" if home else "0px 4px 12px rgba(0,0,0,0.05)"};
     }}
 
 
@@ -166,7 +157,7 @@ def apply_custom_css(home=True):
 
     .highlight-text {{
 
-        color:#3B82F6 !important;
+        color:#DC2626 !important;
 
         font-weight:600;
 
@@ -202,13 +193,15 @@ def apply_custom_css(home=True):
 
         font-family:'Poppins';
 
-        color:#2563EB !important;
+        color:#DC2626 !important;
 
-        background:#DBEAFE;
+        background:#FEF2F2;
 
-        padding:6px 12px;
+        padding:4px 10px;
 
-        border-radius:8px;
+        border-radius:6px;
+
+        border: 1px solid #FCA5A5;
 
         font-size:0.75rem;
 
@@ -225,26 +218,30 @@ def apply_custom_css(home=True):
 
         font-weight:600;
 
-        border-radius:10px;
+        border-radius:6px;
 
-        padding:10px 24px;
+        padding:8px 20px;
 
-        background:linear-gradient(135deg,#2563EB,#1E40AF);
+        background: #DC2626;
 
         color:white;
 
-        border:none;
+        border: 1px solid #B91C1C;
 
-        transition:0.25s;
+        transition:0.2s;
     }}
 
 
 
     .stButton > button:hover {{
 
-        transform:translateY(-2px);
+        transform:translateY(-1px);
 
-        box-shadow:0px 10px 25px rgba(37,99,235,0.5);
+        background: #B91C1C;
+        
+        color: white;
+
+        border-color: #991B1B;
     }}
 
 
@@ -302,8 +299,8 @@ def apply_custom_css(home=True):
     
     .stTextInput input:focus,
     .stTextArea textarea:focus {{
-        border-color: #3B82F6 !important;
-        box-shadow: 0 0 0 1px #3B82F6 !important;
+        border-color: #DC2626 !important;
+        box-shadow: 0 0 0 1px #DC2626 !important;
     }}
 
     /* Input Label Text */
@@ -313,7 +310,55 @@ def apply_custom_css(home=True):
         color: {"#E2E8F0" if home else "#1E293B"} !important;
     }}
 
+    /* ================= TIMELINE ================= */
+    .timeline-container {{
+        border-left: 3px solid #334155;
+        margin-left: 15px;
+        padding-left: 25px;
+        position: relative;
+    }}
 
+    .timeline-item {{
+        position: relative;
+        margin-bottom: 25px;
+        background: {"#1E293B" if home else "#FFFFFF"};
+        padding: 15px 20px;
+        border-radius: 8px;
+        border: 1px solid {"#334155" if home else "#E2E8F0"};
+    }}
+
+    .timeline-item::before {{
+        content: '';
+        position: absolute;
+        left: -34px; 
+        top: 20px;
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        background-color: #DC2626;
+        border: 4px solid {"#0B0F14" if home else "#F8FAFC"};
+        z-index: 2;
+    }}
+
+    .timeline-date {{
+        font-size: 0.8rem;
+        color: #94A3B8;
+        font-family: 'Poppins';
+        margin-bottom: 5px;
+    }}
+
+    .timeline-event {{
+        font-size: 1.05rem;
+        color: {"#E2E8F0" if home else "#0F172A"};
+        font-weight: 600;
+        margin: 0 0 5px 0;
+    }}
+
+    .timeline-desc {{
+        font-size: 0.9rem;
+        color: #64748B;
+        margin: 0;
+    }}
 
     </style>
 

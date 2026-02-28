@@ -819,6 +819,105 @@ async def get_notices():
         }
     ]
 
+@app.get("/api/timeline/{issue_id}")
+async def get_issue_timeline(issue_id: int):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not initialized")
+    
+    try:
+        # Fetch issue details
+        res = supabase.table("complaints").select("*").eq("id", issue_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Issue not found")
+            
+        issue = res.data[0]
+        created_at = issue.get("created_at") or "2026-03-01T00:00:00"
+        base_date = created_at[:10]
+        
+        timeline = []
+        
+        # 1. Issue Reported
+        timeline.append({
+            "event": "Issue Reported",
+            "date": base_date,
+            "description": "Citizen filed the initial grievance report."
+        })
+        
+        # 2. Votes Added (if any)
+        votes = issue.get("upvote_count", 0)
+        if votes > 1:
+            timeline.append({
+                "event": "Community Verification",
+                "date": base_date,
+                "description": f"{votes} citizens supported and escalated this issue."
+            })
+            
+        # 3. Authority Identified
+        if issue.get("ward"):
+            timeline.append({
+                "event": "Authority Identified",
+                "date": base_date,
+                "description": f"Routed to {issue.get('ward')} Municipal Ward."
+            })
+            
+        # 4. In Progress / Status Change
+        status = str(issue.get("status", "pending")).lower()
+        if status in ["in progress", "resolved", "closed"]:
+            timeline.append({
+                "event": "Status Updated: In Progress",
+                "date": base_date,
+                "description": "The relevant authority has acknowledged and begun work."
+            })
+            
+        # 5. Resolved
+        if status in ["resolved", "closed"]:
+            import datetime
+            # Fake a resolution date 2 days after creation for demo purposes, or use updated_at if available
+            try:
+                dt = datetime.datetime.strptime(base_date, "%Y-%m-%d") + datetime.timedelta(days=2)
+                res_date = dt.strftime("%Y-%m-%d")
+            except:
+                res_date = base_date
+                
+            timeline.append({
+                "event": "Resolved",
+                "date": res_date,
+                "description": "The authority has marked this issue as fully resolved."
+            })
+            
+        return timeline
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/platform_updates")
+async def get_platform_updates():
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not initialized")
+        
+    try:
+        # Fetch the 5 most recent issues to construct a global timeline
+        res = supabase.table("complaints").select("id, issue_type, ward, status, created_at").order("created_at", desc=True).limit(5).execute()
+        updates = []
+        for row in res.data:
+            cat = row.get("issue_type", "General")
+            status = str(row.get("status", "pending")).title()
+            ward = row.get("ward", "Unknown Area")
+            date_str = row.get("created_at", "Just now")[:10]
+            
+            event_name = f"New {cat} Alert" if status.lower() == "pending" else f"{cat} {status}"
+            desc = f"A {cat.lower()} issue in {ward} was marked as {status}."
+            
+            updates.append({
+                "event": event_name,
+                "date": date_str,
+                "description": desc,
+                "issue_id": row.get("id")
+            })
+            
+        return updates
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/")
 def root():
     return {"message": "Welcome to the Vox Backend API!"}

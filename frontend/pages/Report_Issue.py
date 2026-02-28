@@ -12,7 +12,7 @@ render_nav()
 
 API_URL = "http://localhost:8000"
 
-st.title("📝 Report an Issue")
+st.title("Report an Issue")
 st.markdown("<p style='color:#64748b; font-size:1.1rem;'>Help us improve the city by reporting civic issues through our AI-assisted reporting wizard.</p>", unsafe_allow_html=True)
 
 # State Management
@@ -126,8 +126,8 @@ elif st.session_state.step == 3:
     st.write("Select your location using the map, auto-detect, or by searching an address.")
     
     # --- SEARCH BAR ---
-    search_query = st.text_input("🔍 Search Location manually", placeholder="Enter area, landmark, or street in Mumbai...", key="loc_search")
-    if st.button("Search Address", key="btn_search_loc"):
+    search_query = st.text_input("Search Location manually", placeholder="Enter area, landmark, or street in Mumbai...", key="loc_search")
+    if st.button("Search Address", key="btn_search_loc", icon=":material/search:"):
         if search_query.strip():
             try:
                 with st.spinner("Searching..."):
@@ -137,7 +137,7 @@ elif st.session_state.step == 3:
                         result = res.json()[0]
                         st.session_state.report_data["lat"] = float(result["lat"])
                         st.session_state.report_data["lon"] = float(result["lon"])
-                        st.success(f"✅ Found: {result.get('display_name', 'Location')}")
+                        st.success(f"Found: {result.get('display_name', 'Location')}", icon=":material/check_circle:")
                     else:
                         st.error("Location not found. Please try another term or use the map below.")
             except Exception as e:
@@ -160,7 +160,7 @@ elif st.session_state.step == 3:
             lon = location['longitude']
             st.session_state.report_data["lat"] = lat
             st.session_state.report_data["lon"] = lon
-            st.success("✅ GPS Detected")
+            st.success("GPS Detected", icon=":material/my_location:")
         
         st.markdown(f"**Latitude:** {lat or 'Not set'}")
         st.markdown(f"**Longitude:** {lon or 'Not set'}")
@@ -259,7 +259,7 @@ elif st.session_state.step == 6:
     if data.get("photo"):
         st.image(data["photo"], caption="Issue Photo", use_container_width=True)
         
-    is_emergency = st.toggle("🚨 Mark as an Emergency (Immediate Hazard)", value=data.get("emergency", False))
+    is_emergency = st.toggle("Mark as an Emergency (Immediate Hazard)", value=data.get("emergency", False))
     st.session_state.report_data["emergency"] = is_emergency
 
     col1, col2, _ = st.columns([1, 3, 3])
@@ -299,9 +299,9 @@ elif st.session_state.step == 6:
                     
     if st.session_state.get("sub_success"):
         if st.session_state.get("sub_dedup"):
-            st.info("🔄 We found an identical issue already reported nearby! We've automatically added your upvote to it to boost its priority without creating a duplicate.")
+            st.info("We found an identical issue already reported nearby! We've automatically added your upvote to it to boost its priority without creating a duplicate.", icon=":material/auto_awesome:")
         else:
-            st.success("🎉 Issue Submitted Successfully.")
+            st.success("Issue Submitted Successfully.", icon=":material/check_circle:")
         st.markdown("### Auto Evidence Report")
         st.info("Evidence Report Ready")
         
@@ -320,11 +320,12 @@ elif st.session_state.step == 6:
             pdf_res = requests.post(f"{API_URL}/api/generate_evidence_pdf", json=pdf_payload, timeout=20)
             if pdf_res.status_code == 200:
                 st.download_button(
-                    label="📥 Download Evidence Report PDF",
+                    label="Download Evidence Report PDF",
                     data=pdf_res.content,
-                    file_name="civicsense_evidence_report.pdf",
+                    file_name="vox_evidence_report.pdf",
                     mime="application/pdf",
-                    type="primary"
+                    type="primary",
+                    icon=":material/download:"
                 )
                 
                 if st.button("Start New Report"):

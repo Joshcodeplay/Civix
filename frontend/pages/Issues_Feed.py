@@ -8,7 +8,7 @@ from utils import apply_custom_css
 apply_custom_css()
 render_nav()
 
-st.title("📋 Issues Dashboard")
+st.title("Issues Dashboard")
 st.markdown("<p style='color:#64748b;'>Browse, search, and track community issues.</p>", unsafe_allow_html=True)
 st.divider()
 
@@ -28,7 +28,7 @@ def fetch_issues(lat=None, lon=None, radius=None):
     return []
 
 # --- LOCATION BASED FILTERING ---
-use_location = st.toggle("📍 Filter by My Location", value=False)
+use_location = st.toggle("Filter by My Location", value=False)
 
 filter_lat, filter_lon, filter_radius = None, None, None
 
@@ -74,7 +74,7 @@ for iss in raw_issues:
     if search_q and search_q.lower() not in iss.get('description', '').lower() and search_q.lower() not in iss.get('title', '').lower(): continue
     filtered_issues.append(iss)
 
-# --- DATA TABLE (List View) ---
+# --- DATA TABLE (With Inline Expansion) ---
 if not filtered_issues:
     st.info("No issues match your filters.")
 else:
@@ -106,15 +106,95 @@ else:
         cols[3].markdown(f"<span style='font-size:0.9rem;'>{issue.get('date', 'Recent')}</span>", unsafe_allow_html=True)
         
         # Votes
-        cols[4].markdown(f"<span style='font-size:1.1rem; font-weight:bold;'>{issue.get('votes', 0)}</span>👍", unsafe_allow_html=True)
+        cols[4].markdown(f"<span style='font-size:1.1rem; font-weight:bold;'>{issue.get('votes', 0)}</span>", unsafe_allow_html=True)
         
-        # Action Button (Navigate to details)
+        # Action Button (Inline Expand)
+        is_expanded = st.session_state.get(f"expand_{issue['id']}", False)
+        
         with cols[5]:
-            if st.button("View", key=f"view_{issue['id']}", use_container_width=True):
-                # Using session state to pass context instead of query params if preferred, or query params in latest streamlit:
-                st.query_params.update({"id": issue['id']})
-                st.switch_page("pages/Issue_Detail.py")
+            # Instead of navigating, toggle the state
+            if st.button("Close" if is_expanded else "Expand", key=f"view_{issue['id']}", use_container_width=True, type="primary" if is_expanded else "secondary"):
+                st.session_state[f"expand_{issue['id']}"] = not is_expanded
+                st.rerun()
                 
+        # --- INLINE EXPANDED DETAILS ---
+        if st.session_state.get(f"expand_{issue['id']}", False):
+            with st.container(border=True):
+                # Fetch Timeline Data dynamically
+                tl_data = []
+                try:
+                    tl_res = requests.get(f"{API_URL}/api/timeline/{issue['id']}", timeout=3)
+                    if tl_res.status_code == 200:
+                        tl_data = tl_res.json()
+                except:
+                    pass
+                    
+                col_left, col_right = st.columns([2, 1])
+                
+                with col_left:
+                    st.markdown(f"<h3 style='margin-bottom:0px;'>{issue.get('title', 'Issue Details')}</h3>", unsafe_allow_html=True)
+                    
+                    # Badges row
+                    b_color = "#f59e0b" if status_color == "#f59e0b" else ("#10b981" if status_color == "#10b981" else "#ef4444")
+                    badge_html = f"<span style='background-color:{b_color}15; color:{b_color}; padding:4px 10px; border-radius:4px; font-weight:600; font-size:0.8rem; border:1px solid {b_color}40;'>{issue.get('status', 'Pending')}</span>"
+                    if str(issue.get("status", "")).lower() in ["in progress", "resolved"]:
+                        badge_html += f" <span style='background-color:#10b98115; color:#10b981; padding:4px 10px; border-radius:4px; font-weight:600; font-size:0.8rem; border:1px solid #10b98140;'>:material/verified: Verified Authority Update</span>"
+                    
+                    st.markdown(f"<div style='margin:10px 0 20px 0;'>{badge_html}</div>", unsafe_allow_html=True)
+                    
+                    st.markdown(f"**Description:** {issue.get('description', '')}")
+                    if issue.get('latitude') and issue.get('longitude'):
+                        st.markdown(f"**GPS Coordinates:** {issue['latitude']}, {issue['longitude']}")
+                    st.markdown(f"**Category:** {issue.get('category', 'General')}")
+                    
+                    if issue.get('image_url'):
+                        st.image(issue['image_url'], caption="High-Res Evidence", use_container_width=True)
+                        
+                    # --- CIVIC TIMELINE ---
+                    st.markdown("<h4 style='margin-top:20px; border-bottom:1px solid #334155; padding-bottom:5px;'>Issue Timeline</h4>", unsafe_allow_html=True)
+                    if not tl_data:
+                        st.markdown("<p style='color:#64748b;'>Timeline context processing...</p>", unsafe_allow_html=True)
+                    else:
+                        st.markdown("<div class='timeline-container'>", unsafe_allow_html=True)
+                        for ev in tl_data:
+                            st.markdown(f"""
+                            <div class='timeline-item'>
+                                <div class='timeline-date'>{ev.get('date', '')}</div>
+                                <h5 class='timeline-event'>{ev.get('event', '')}</h5>
+                                <p class='timeline-desc'>{ev.get('description', '')}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        st.markdown("</div>", unsafe_allow_html=True)
+                
+                with col_right:
+                    # Transparency Info Box
+                    auth_name = f"{issue.get('ward', 'Mumbai')} Municipal Dept" if str(issue.get("status", "")).lower() != "pending" else "Pending Allocation"
+                    st.markdown(f"""
+                    <div style='background-color:#1e293b; padding:20px; border-radius:10px; border:1px solid #334155; margin-bottom:20px;'>
+                        <h4 style='margin-top:0; color:#e2e8f0; font-size:1.1rem;'>Transparency Info</h4>
+                        <hr style='border-color:#334155; margin:10px 0;'>
+                        <p style='margin:5px 0; font-size:0.9rem; color:#94a3b8;'><strong>Publicly Tracked Since:</strong><br>{issue.get('date', 'Recent')}</p>
+                        <p style='margin:15px 0 5px 0; font-size:0.9rem; color:#94a3b8;'><strong>Total Supporters:</strong><br><span style='color:#e2e8f0; font-weight:bold; font-size:1.1rem;'>{issue.get('votes', 0)} citizens</span></p>
+                        <p style='margin:15px 0 0 0; font-size:0.9rem; color:#94a3b8;'><strong>Authority Responsible:</strong><br><span style='color:#3b82f6;'>{auth_name}</span></p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    v_btn = st.button("Upvote to Escalate", key=f"upvote_{issue['id']}", type="primary", use_container_width=True, icon=":material/thumb_up:")
+                    if v_btn:
+                        try:
+                            res = requests.post(f"{API_URL}/api/vote/{issue['id']}")
+                            if res.status_code == 200:
+                                st.toast("Vote Added Successfully!", icon=":material/check_circle:")
+                                st.rerun()
+                            else:
+                                st.error("Failed to register vote.")
+                        except:
+                            st.error("Network error.")
+                            
+                    if st.button("Fullscreen Map", key=f"details_{issue['id']}", use_container_width=True, icon=":material/open_in_new:"):
+                        st.query_params.update({"id": issue['id']})
+                        st.switch_page("pages/Issue_Detail.py")
+                        
         st.markdown("<hr style='margin: 0.5rem 0; opacity: 0.5;'>", unsafe_allow_html=True)
 
 render_footer()

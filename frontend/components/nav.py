@@ -4,11 +4,11 @@ import requests
 API_URL = "http://localhost:8000"
 
 # --- SOS EMERGENCY SYSTEM ---
-@st.dialog("🚨 Report SOS Emergency")
+@st.dialog("Report SOS Emergency")
 def sos_dialog():
     st.markdown("<p style='color:#ef4444; font-weight:bold;'>WARNING: This will immediately alert all nearby users.</p>", unsafe_allow_html=True)
     sos_desc = st.text_input("What is the emergency?", placeholder="e.g. Fire in building, Severe accident...")
-    if st.button("Send SOS Alert", type="primary", use_container_width=True):
+    if st.button("Send SOS Alert", type="primary", use_container_width=True, icon=":material/warning:"):
         if not sos_desc:
             st.error("Please provide details of the emergency.")
             return
@@ -86,7 +86,7 @@ def render_nav():
     
     # Display SOS confirmation or banner
     if st.session_state.get("sos_sent"):
-        st.success("🚨 SOS alert successfully broadcasted to nearby users!")
+        st.success("SOS alert successfully broadcasted to nearby users!", icon=":material/check_circle:")
         if st.button("Dismiss Alert", key="dismiss_sos_alert"):
             st.session_state["sos_sent"] = False
             st.rerun()
@@ -109,11 +109,11 @@ def render_nav():
                 for alert in active_alerts:
                     alert_key = f"sos_{alert['id']}"
                     
-                    st.error(f"**🚨 EMERGENCY NEARBY ({alert['distance_km']} km away):** {alert['description']} - Reported at {alert['time']}", icon="🚨")
+                    st.error(f"**EMERGENCY NEARBY ({alert['distance_km']} km away):** {alert['description']} - Reported at {alert['time']}", icon=":material/warning:")
                     
                     # If this is a new alert, trigger notifications
                     if alert_key not in st.session_state["notified_alerts"]:
-                        st.toast(f"🚨 NEW EMERGENCY: {alert['description']}", icon="🚨")
+                        st.toast(f"NEW EMERGENCY: {alert['description']}", icon=":material/warning:")
                         
                         # Trigger native browser notification
                         js_code = f"""
@@ -146,23 +146,25 @@ def render_nav():
     with col_logo:
         st.markdown("""
         <div style='display: flex; flex-direction: column; justify-content: center; height: 100%; margin-top: -5px;'>
-            <h3 style='margin: 0; padding: 0; color: #2563EB !important; font-family: \"Bebas Neue\", sans-serif; letter-spacing: 1px;'>🏙️ CivicSense</h3>
-            <p style='margin: 0; font-size: 0.8rem; color: #94a3b8 !important; line-height: 1;'>AI-Powered Civic Intelligence Platform</p>
+            <h1 style='margin: 0; padding: 0; font-family: \"Bebas Neue\", sans-serif; letter-spacing: 2px; font-size: 2.2rem;'>
+                <span style='color: white;'>VO</span><span style='color: #DC2626;'>X</span>
+            </h1>
+            <p style='margin: 0; font-size: 0.8rem; color: #94a3b8 !important; line-height: 1; font-weight: 500;'>Civic Intelligence Platform</p>
         </div>
         """, unsafe_allow_html=True)
         
     with col1:
-        st.page_link("pages/Home.py", label="Home")
+        st.page_link("pages/Home.py", label="Dashboard", icon=":material/dashboard:")
     with col2:
-        st.page_link("pages/Report_Issue.py", label="Report")
+        st.page_link("pages/Report_Issue.py", label="Report", icon=":material/description:")
     with col3:
-        st.page_link("pages/Issues_Feed.py", label="Issues")
+        st.page_link("pages/Issues_Feed.py", label="Issues", icon=":material/list:")
     with col4:
-        st.page_link("pages/Map_View.py", label="Map")
+        st.page_link("pages/Map_View.py", label="Map", icon=":material/map:")
     with col5:
-        st.page_link("pages/Notices.py", label="Notices")
+        st.page_link("pages/Notices.py", label="Notices", icon=":material/notifications:")
     with col6:
-        st.page_link("pages/My_Reports.py", label="Profile")
+        st.page_link("pages/My_Reports.py", label="Profile", icon=":material/person:")
     with col_sos:
         st.markdown("""
         <style>
@@ -173,7 +175,7 @@ def render_nav():
         </style>
         <div class='sos-btn'>
         """, unsafe_allow_html=True)
-        if st.button("🚨 S.O.S", key="nav_sos_btn", use_container_width=True):
+        if st.button("S.O.S", key="nav_sos_btn", use_container_width=True, icon=":material/warning:"):
             if not user_lat or not user_lon:
                 st.error("Please enable location on Home page first.")
             else:

@@ -11,7 +11,7 @@ from utils import apply_custom_css
 apply_custom_css()
 render_nav()
 
-st.title("🗺️ Civic Map Hub")
+st.title("Civic Map Hub")
 st.markdown("<p style='color:#64748b;'>Visualize and filter active civic issues across the metropolitan area.</p>", unsafe_allow_html=True)
 st.divider()
 
@@ -31,7 +31,7 @@ def fetch_issues(lat=None, lon=None, radius=None):
     return []
 
 # --- LOCATION BASED FILTERING ---
-use_location = st.toggle("📍 Filter by My Location", value=False)
+use_location = st.toggle("Filter by My Location", value=False)
 
 filter_lat, filter_lon, filter_radius = None, None, None
 
@@ -69,7 +69,7 @@ with col2:
 with col3:
     status_filter = st.selectbox("Status", ["All", "Pending", "In Progress", "Resolved"])
 with col4:
-    emergency_filter = st.checkbox("🚨 Emergency Only")
+    emergency_filter = st.checkbox("Emergency Only")
 
 # --- FILTER DATA ---
 filtered_issues = []
@@ -123,7 +123,7 @@ else:
                     <span style="font-weight:bold; color:#10b981;">{votes} Votes</span>
                     <span style="font-weight:bold; color:{color};">{status}</span>
                 </div>
-                { '<div style="margin-top:8px; color:#ef4444; font-weight:bold;">🚨 EMERGENCY HAZARD</div>' if is_emergency else '' }
+                { '<div style="margin-top:8px; color:#ef4444; font-weight:bold;">EMERGENCY HAZARD</div>' if is_emergency else '' }
             </div>
             """
             
