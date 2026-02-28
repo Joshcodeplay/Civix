@@ -38,17 +38,20 @@ if not issues:
 else:
     for issue in issues:
         issue_id = issue.get("id")
+        desc = issue.get("description", "No description")
+        cat = issue.get("category", "General")
+        votes = issue.get("votes", 0)
+        em_badge = '<span class="emergency-badge">🚨 EMERGENCY</span>\n' if issue.get("emergency") else ""
         
-        with st.container(border=True):
-            if issue.get("emergency"):
-                st.markdown('<span class="emergency-badge">🚨 EMERGENCY</span>', unsafe_allow_html=True)
-            
-            st.markdown(f'<span class="category-badge">{issue.get("category", "General")}</span>', unsafe_allow_html=True)
-            st.markdown(f'<h4 style="margin-top: 0.5rem; margin-bottom: 0.5rem;">{issue.get("description", "No description")}</h4>', unsafe_allow_html=True)
-            
-            col1, col2 = st.columns([1, 4])
-            with col1:
-                st.markdown(f'<p style="margin-top:0.5rem;" class="secondary-text">Votes: <strong>{issue.get("votes", 0)}</strong></p>', unsafe_allow_html=True)
-            with col2:
-                if st.button("👍 Upvote", key=f"vote_{issue_id}", type="secondary"):
+        html_card = (
+"<div class=\"issues-card\">\n"
+f"{em_badge}"
+f"<span class=\"category-badge\">{cat}</span>\n"
+f"<h4 style=\"margin-top: 0.5rem;\">{desc}</h4>\n"
+f"<p class=\"secondary-text\">Votes: <strong>{votes}</strong></p>\n"
+"</div>"
+        )
+        st.markdown(html_card, unsafe_allow_html=True)
+        
+        if st.button("👍 Upvote", key=f"vote_{issue_id}", type="secondary"):
                     vote_issue(issue_id)

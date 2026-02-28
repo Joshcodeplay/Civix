@@ -21,14 +21,14 @@ try:
             st.info("No recent issues found.")
         else:
             for issue in issues:
-                html_card = f"""
-                <div class="issues-card">
-                    {f'<span class="emergency-badge">🚨 EMERGENCY</span>' if issue.get('emergency') else ''}
-                    <span class="category-badge">{issue.get('category', 'General')}</span>
-                    <h4 style="margin-top: 0.5rem;">{issue.get('description', 'No description')}</h4>
-                    <p class="secondary-text">Votes: <strong>{issue.get('votes', 0)}</strong></p>
-                </div>
-                """
+                html_card = (
+"<div class=\"issues-card\">\n"
+f"{'<span class=\"emergency-badge\">🚨 EMERGENCY</span>' if issue.get('emergency') else ''}\n"
+f"<span class=\"category-badge\">{issue.get('category', 'General')}</span>\n"
+f"<h4 style=\"margin-top: 0.5rem;\">{issue.get('description', 'No description')}</h4>\n"
+f"<p class=\"secondary-text\">Votes: <strong>{issue.get('votes', 0)}</strong></p>\n"
+"</div>"
+                )
                 st.markdown(html_card, unsafe_allow_html=True)
     else:
         st.error(f"Failed to fetch issues. Status code: {response.status_code}")

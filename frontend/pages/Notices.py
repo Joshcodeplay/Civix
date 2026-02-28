@@ -31,15 +31,15 @@ else:
         source = notice.get("source", "Official Government")
         date = notice.get("date", "Recent")
         
-        html_card = f"""
-        <div class="issues-card">
-            <h3 style="margin-top: 0; margin-bottom: 0.5rem; color: #1f2937;">{title}</h3>
-            <div style="display: flex; gap: 10px; margin-bottom: 1rem; font-size: 0.85rem; color: #6b7280;">
-                <span><strong>Source:</strong> {source}</span>
-                <span>•</span>
-                <span><strong>Date:</strong> {date}</span>
-            </div>
-            <p style="color: #4b5563; line-height: 1.5; margin-bottom: 0;">{summary}</p>
-        </div>
-        """
+        html_card = (
+"<div class=\"issues-card\">\n"
+f"<h3 style=\"margin-top: 0; margin-bottom: 0.5rem; color: #1f2937;\">{title}</h3>\n"
+"<div style=\"display: flex; gap: 10px; margin-bottom: 1rem; font-size: 0.85rem; color: #6b7280;\">\n"
+f"<span><strong>Source:</strong> {source}</span>\n"
+"<span>•</span>\n"
+f"<span><strong>Date:</strong> {date}</span>\n"
+"</div>\n"
+f"<p style=\"color: #4b5563; line-height: 1.5; margin-bottom: 0;\">{summary}</p>\n"
+"</div>"
+        )
         st.markdown(html_card, unsafe_allow_html=True)
