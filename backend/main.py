@@ -7,6 +7,8 @@ import io
 from typing import Optional
 from dotenv import load_dotenv
 import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google.api_core.exceptions import ResourceExhausted
 from supabase import create_client, Client
 from fpdf import FPDF
 
@@ -26,8 +28,15 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and
 # Initialize Gemini
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-# Using gemini-2.5-flash for general fast generation
-model = genai.GenerativeModel("gemini-2.5-flash")
+
+safety_settings = {
+    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+}
+# Migrate to flash-lite for higher quota
+model = genai.GenerativeModel("gemini-2.5-flash-lite", safety_settings=safety_settings)
 
 # Define Pydantic models for the request and response
 class IssueSubmitRequest(BaseModel):
@@ -78,12 +87,22 @@ async def submit_issue(request: IssueSubmitRequest):
     try:
         response = model.generate_content(extraction_prompt, generation_config={"response_mime_type": "application/json"})
         extracted_data = json.loads(response.text)
+    except ResourceExhausted:
+        return {"error": "rate_limit", "message": "City servers busy, using fallback location."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process with Gemini: {str(e)}")
         
     # Step 2: Ensure we have location data
     missing_location_in_text = extracted_data.get("missing_location", True)
     has_gps = request.latitude is not None and request.longitude is not None
+    
+    # Vikhroli Fallback
+    if not has_gps:
+        ward = extracted_data.get("ward") or ""
+        if "vikhroli" in ward.lower() or "vikhroli" in request.description.lower():
+            request.latitude = 19.1075
+            request.longitude = 72.9372
+            has_gps = True
     
     if missing_location_in_text and not has_gps:
         # Generate a targeted follow-up question
@@ -98,16 +117,27 @@ async def submit_issue(request: IssueSubmitRequest):
             "question": q_response.text.strip()
         }
         
-    # Step 3: Vectorize the complaint description
+    # Step 3: Resolve Embeddings - Check DB first to avoid duplicate API Calls
+    embedding = None
     try:
-        embedding_result = genai.embed_content(
-            model="models/gemini-embedding-001",
-            content=request.description,
-            task_type="retrieval_document"
-        )
-        embedding = embedding_result['embedding']
+        existing = supabase.table("complaints").select("embedding").eq("description", request.description).limit(1).execute()
+        if existing.data and len(existing.data) > 0:
+            embedding = existing.data[0]["embedding"]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate embedding: {str(e)}")
+        print(f"Warning: Failed to query existing embeddings: {e}")
+        
+    if not embedding:
+        try:
+            embedding_result = genai.embed_content(
+                model="models/gemini-embedding-001",
+                content=request.description,
+                task_type="retrieval_document"
+            )
+            embedding = embedding_result['embedding']
+        except ResourceExhausted:
+            return {"error": "rate_limit", "message": "City servers busy, using fallback location."}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to generate embedding: {str(e)}")
         
     # Step 4: Semantic Deduplication using Supabase RPC
     try:
