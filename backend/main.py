@@ -86,7 +86,7 @@ async def submit_issue(request: IssueSubmitRequest):
     # Step 3: Vectorize the complaint description
     try:
         embedding_result = genai.embed_content(
-            model="models/text-embedding-004",
+            model="models/gemini-embedding-001",
             content=request.description,
             task_type="retrieval_document"
         )

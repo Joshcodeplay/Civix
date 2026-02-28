@@ -11,7 +11,7 @@ create table if not exists complaints (
     latitude double precision,
     longitude double precision,
     image_url text,
-    embedding vector(768), -- Gemini text-embedding-004 has 768 dimensions
+    embedding vector(3072), -- Gemini text-embedding-004 has 768 dimensions
     upvote_count integer default 1,
     status text default 'pending',
     created_at timestamp with time zone default timezone('utc'::text, now())
