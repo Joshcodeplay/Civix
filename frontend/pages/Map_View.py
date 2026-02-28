@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+from streamlit_js_eval import get_geolocation
 from streamlit_folium import st_folium
 import folium
 from folium.plugins import HeatMap
@@ -17,16 +18,47 @@ st.divider()
 API_URL = "http://localhost:8000"
 
 @st.cache_data(ttl=60)
-def fetch_issues():
+def fetch_issues(lat=None, lon=None, radius=None):
+    url = f"{API_URL}/api/issues"
+    if lat and lon and radius:
+        url += f"?lat={lat}&lon={lon}&radius={radius}"
     try:
-        response = requests.get(f"{API_URL}/api/issues", timeout=5)
+        response = requests.get(url, timeout=5)
         if response.status_code == 200:
             return response.json()
     except Exception as e:
         st.error(f"Error fetching issues: {e}")
     return []
 
-raw_issues = fetch_issues()
+# --- LOCATION BASED FILTERING ---
+use_location = st.toggle("📍 Filter by My Location", value=False)
+
+filter_lat, filter_lon, filter_radius = None, None, None
+
+if use_location:
+    if "user_lat" not in st.session_state or "user_lon" not in st.session_state:
+        location = get_geolocation("Fetch Location")
+        if location and "coords" in location:
+            st.session_state["user_lat"] = location["coords"]["latitude"]
+            st.session_state["user_lon"] = location["coords"]["longitude"]
+            st.rerun()
+            
+        l_col1, l_col2 = st.columns(2)
+        man_lat = l_col1.number_input("Latitude", value=19.0760, format="%.4f", key="map_lat")
+        man_lon = l_col2.number_input("Longitude", value=72.8777, format="%.4f", key="map_lon")
+        if st.button("Use Manual Location", key="map_loc_btn"):
+            st.session_state["user_lat"] = man_lat
+            st.session_state["user_lon"] = man_lon
+            st.rerun()
+
+    filter_lat = st.session_state.get("user_lat")
+    filter_lon = st.session_state.get("user_lon")
+    
+    if filter_lat and filter_lon:
+        filter_radius = st.slider("Select Radius (km)", 1, 20, 5)
+        st.info(f"Showing issues within {filter_radius} km of your location")
+
+raw_issues = fetch_issues(filter_lat, filter_lon, filter_radius)
 
 # --- FILTERS ROW ---
 col1, col2, col3, col4 = st.columns(4)

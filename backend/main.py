@@ -1,6 +1,7 @@
 import os
 import json
-from fastapi import FastAPI, UploadFile, File, HTTPException
+import math
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import io
@@ -251,8 +252,20 @@ async def parse_circular(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse circular: {str(e)}")
 
+def calculate_distance(lat1, lon1, lat2, lon2):
+    R = 6371
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return R * c
+
 @app.get("/api/issues")
-async def get_issues():
+async def get_issues(
+    lat: Optional[float] = Query(None),
+    lon: Optional[float] = Query(None),
+    radius: Optional[float] = Query(None)
+):
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase client not initialized")
     try:
@@ -261,6 +274,15 @@ async def get_issues():
         # Map to what frontend expects
         issues = []
         for row in response.data:
+            i_lat = row.get("latitude")
+            i_lon = row.get("longitude")
+            
+            # Apply location filtering if parameters are provided
+            if lat is not None and lon is not None and radius is not None and i_lat is not None and i_lon is not None:
+                dist = calculate_distance(lat, lon, i_lat, i_lon)
+                if dist > radius:
+                    continue
+
             issues.append({
                 "id": row.get("id"),
                 "title": f"Civic Issue #{row.get('id')}",
@@ -268,8 +290,8 @@ async def get_issues():
                 "category": row.get("issue_type", "General"),
                 "votes": row.get("upvote_count", 0),
                 "emergency": row.get("severity") in ["High", "Critical"],
-                "latitude": row.get("latitude"),
-                "longitude": row.get("longitude"),
+                "latitude": i_lat,
+                "longitude": i_lon,
                 "status": str(row.get("status", "Pending")).title(),
                 "date": row.get("created_at")[:10] if row.get("created_at") else "Recent",
                 "ward": row.get("ward", "Unknown")
