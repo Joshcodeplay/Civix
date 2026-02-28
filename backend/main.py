@@ -7,9 +7,9 @@ from pydantic import BaseModel
 import io
 from typing import Optional
 from dotenv import load_dotenv
-import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
-from google.api_core.exceptions import ResourceExhausted
+from google import genai
+from google.genai import types
+from google.genai.errors import APIError
 from supabase import create_client, Client
 from fpdf import FPDF
 
@@ -27,17 +27,14 @@ if not GEMINI_API_KEY or not SUPABASE_URL or not SUPABASE_KEY:
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 
 # Initialize Gemini
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else genai.Client()
 
-safety_settings = {
-    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-}
-# Migrate to flash-lite for higher quota
-model = genai.GenerativeModel("gemini-2.5-flash-lite", safety_settings=safety_settings)
+safety_settings = [
+    types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
+    types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
+    types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+    types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+]
 
 # Define Pydantic models for the request and response
 class IssueSubmitRequest(BaseModel):
@@ -109,15 +106,24 @@ async def submit_issue(request: IssueSubmitRequest):
     """
     
     try:
-        response = model.generate_content(extraction_prompt, generation_config={"response_mime_type": "application/json"})
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=extraction_prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                safety_settings=safety_settings
+            )
+        )
         raw_text = response.text.strip()
         if raw_text.startswith("```json"):
             raw_text = raw_text[7:]
         if raw_text.endswith("```"):
             raw_text = raw_text[:-3]
         extracted_data = json.loads(raw_text.strip())
-    except ResourceExhausted:
-        return {"error": "rate_limit", "message": "City servers busy, using fallback location."}
+    except APIError as e:
+        if e.code == 429:
+            return {"error": "rate_limit", "message": "City servers busy, using fallback location."}
+        raise HTTPException(status_code=500, detail=f"Failed to process with Gemini: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process with Gemini: {str(e)}")
         
@@ -140,7 +146,11 @@ async def submit_issue(request: IssueSubmitRequest):
         We don't have GPS coordinates, and the description lacks a specific location (like a street name, landmark, or ward).
         Ask a very brief, polite question to find out exactly where this problem is located.
         """
-        q_response = model.generate_content(question_prompt)
+        q_response = client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=question_prompt,
+            config=types.GenerateContentConfig(safety_settings=safety_settings)
+        )
         return {
             "status": "incomplete",
             "question": q_response.text.strip()
@@ -157,14 +167,16 @@ async def submit_issue(request: IssueSubmitRequest):
         
     if not embedding:
         try:
-            embedding_result = genai.embed_content(
-                model="models/gemini-embedding-001",
-                content=request.description,
-                task_type="retrieval_document"
+            embedding_result = client.models.embed_content(
+                model="text-embedding-004",
+                contents=request.description,
+                config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
             )
-            embedding = embedding_result['embedding']
-        except ResourceExhausted:
-            return {"error": "rate_limit", "message": "City servers busy, using fallback location."}
+            embedding = embedding_result.embeddings[0].values
+        except APIError as e:
+            if e.code == 429:
+                return {"error": "rate_limit", "message": "City servers busy, using fallback location."}
+            raise HTTPException(status_code=500, detail=f"Failed to generate embedding: {str(e)}")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to generate embedding: {str(e)}")
         
@@ -287,12 +299,12 @@ async def report_issue(
         
     if not embedding:
         try:
-            embedding_result = genai.embed_content(
-                model="models/gemini-embedding-001",
-                content=description,
-                task_type="retrieval_document"
+            embedding_result = client.models.embed_content(
+                model="text-embedding-004",
+                contents=description,
+                config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
             )
-            embedding = embedding_result['embedding']
+            embedding = embedding_result.embeddings[0].values
         except Exception as e:
             print(f"Embedding error: {e}")
 
@@ -364,11 +376,26 @@ async def get_responsible_authority(request: AuthorityRequest):
     }}
     """
     try:
-        response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                safety_settings=safety_settings
+            )
+        )
         raw = response.text.strip()
         if raw.startswith("```json"): raw = raw[7:]
         if raw.endswith("```"): raw = raw[:-3]
         return json.loads(raw.strip())
+    except APIError as e:
+        if e.code == 429:
+            return {
+                "authority": "Local Municipal Corporation",
+                "department": "Pending Classification",
+                "expected_time": "3-5 days (Estimated)"
+            }
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -414,10 +441,10 @@ async def parse_circular(file: UploadFile = File(...)):
         file_bytes = await file.read()
         
         # Pass the bytes directly to Gemini 
-        pdf_part = {
-            "mime_type": "application/pdf",
-            "data": file_bytes
-        }
+        pdf_part = types.Part.from_bytes(
+            data=file_bytes,
+            mime_type="application/pdf",
+        )
         
         prompt = """
         Read the attached Marathi municipal circular.
@@ -438,9 +465,13 @@ async def parse_circular(file: UploadFile = File(...)):
         ]
         """
         
-        response = model.generate_content(
-            [pdf_part, prompt],
-            generation_config={"response_mime_type": "application/json"}
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=[pdf_part, prompt],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                safety_settings=safety_settings
+            )
         )
         
         extracted_data = json.loads(response.text)
@@ -449,6 +480,14 @@ async def parse_circular(file: UploadFile = File(...)):
             "data": extracted_data
         }
         
+    except APIError as e:
+        if e.code == 429:
+            return {
+                "status": "partial_success",
+                "message": "AI limit reached. The circular is uploaded but not fully analyzed yet.",
+                "data": []
+            }
+        raise HTTPException(status_code=500, detail=f"Failed to parse circular: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse circular: {str(e)}")
 
@@ -536,13 +575,24 @@ async def parse_issue(request: ParseRequest):
     }}
     """
     try:
-        response = model.generate_content(extraction_prompt, generation_config={"response_mime_type": "application/json"})
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=extraction_prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                safety_settings=safety_settings
+            )
+        )
         raw_text = response.text.strip()
         if raw_text.startswith("```json"):
             raw_text = raw_text[7:]
         if raw_text.endswith("```"):
             raw_text = raw_text[:-3]
         return json.loads(raw_text.strip())
+    except APIError as e:
+        if e.code == 429:
+            return {"error": "rate_limit", "category": "General", "description": request.text}
+        raise HTTPException(status_code=500, detail=f"Failed to parse with Gemini: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse: {str(e)}")
 
@@ -555,12 +605,12 @@ async def check_duplicate(request: CheckDuplicateRequest):
     
     try:
         # 1. Embed description
-        embedding_result = genai.embed_content(
-            model="models/gemini-embedding-001",
-            content=request.description,
-            task_type="retrieval_document"
+        embedding_result = client.models.embed_content(
+            model="text-embedding-004",
+            contents=request.description,
+            config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
         )
-        embedding = embedding_result['embedding']
+        embedding = embedding_result.embeddings[0].values
         
         # 2. Search Supabase
         rpc_params = {
