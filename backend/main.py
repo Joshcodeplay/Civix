@@ -1,6 +1,7 @@
 import os
 import json
-from fastapi import FastAPI, UploadFile, File, HTTPException
+import math
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import io
@@ -44,6 +45,8 @@ class IssueSubmitRequest(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     image_url: Optional[str] = None
+    reporter_name: Optional[str] = None
+    reporter_phone: Optional[str] = None
 
 class CheckDuplicateRequest(BaseModel):
     description: str
@@ -187,6 +190,8 @@ async def submit_issue(request: IssueSubmitRequest):
             "latitude": request.latitude,
             "longitude": request.longitude,
             "image_url": request.image_url,
+            "reporter_name": request.reporter_name,
+            "reporter_phone": request.reporter_phone,
             "embedding": embedding,
             "upvote_count": 1,
             "status": "pending"
@@ -251,8 +256,20 @@ async def parse_circular(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse circular: {str(e)}")
 
+def calculate_distance(lat1, lon1, lat2, lon2):
+    R = 6371
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return R * c
+
 @app.get("/api/issues")
-async def get_issues():
+async def get_issues(
+    lat: Optional[float] = Query(None),
+    lon: Optional[float] = Query(None),
+    radius: Optional[float] = Query(None)
+):
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase client not initialized")
     try:
@@ -261,6 +278,15 @@ async def get_issues():
         # Map to what frontend expects
         issues = []
         for row in response.data:
+            i_lat = row.get("latitude")
+            i_lon = row.get("longitude")
+            
+            # Apply location filtering if parameters are provided
+            if lat is not None and lon is not None and radius is not None and i_lat is not None and i_lon is not None:
+                dist = calculate_distance(lat, lon, i_lat, i_lon)
+                if dist > radius:
+                    continue
+
             issues.append({
                 "id": row.get("id"),
                 "title": f"Civic Issue #{row.get('id')}",
@@ -268,8 +294,8 @@ async def get_issues():
                 "category": row.get("issue_type", "General"),
                 "votes": row.get("upvote_count", 0),
                 "emergency": row.get("severity") in ["High", "Critical"],
-                "latitude": row.get("latitude"),
-                "longitude": row.get("longitude"),
+                "latitude": i_lat,
+                "longitude": i_lon,
                 "status": str(row.get("status", "Pending")).title(),
                 "date": row.get("created_at")[:10] if row.get("created_at") else "Recent",
                 "ward": row.get("ward", "Unknown")
@@ -417,7 +443,7 @@ async def generate_pdf(request: GeneratePDFRequest):
 
 @app.get("/api/dashboard_stats")
 async def get_dashboard_stats():
-    if not supabase: return {}
+    if not supabase: return {"total": 0, "active": 0, "resolved": 0, "emergency": 0}
     res = supabase.table("complaints").select("id, status, severity").execute()
     total = len(res.data)
     active = sum(1 for r in res.data if r.get("status", "").lower() in ["pending", "in progress"])
@@ -427,7 +453,7 @@ async def get_dashboard_stats():
 
 @app.get("/api/insights")
 async def get_insights():
-    if not supabase: return {}
+    if not supabase: return {"top_category": "N/A", "top_ward": "General", "trending": []}
     res = supabase.table("complaints").select("issue_type, ward").execute()
     counts = {}
     ward_counts = {}

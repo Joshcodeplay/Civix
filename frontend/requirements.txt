@@ -1,5 +1,7 @@
 streamlit>=1.36.0
 requests
+streamlit>=1.36.0
+requests
 streamlit-folium
 folium
 streamlit-geolocation
@@ -7,3 +9,4 @@ beautifulsoup4
 pdfplumber
 google-generativeai
 python-dotenv
+streamlit-js-eval
