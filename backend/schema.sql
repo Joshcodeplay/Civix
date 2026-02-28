@@ -11,6 +11,8 @@ create table if not exists complaints (
     latitude double precision,
     longitude double precision,
     image_url text,
+    reporter_name text,
+    reporter_phone text,
     embedding vector(3072), -- Gemini text-embedding-004 has 768 dimensions
     upvote_count integer default 1,
     status text default 'pending',

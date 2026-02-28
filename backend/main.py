@@ -45,6 +45,8 @@ class IssueSubmitRequest(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     image_url: Optional[str] = None
+    reporter_name: Optional[str] = None
+    reporter_phone: Optional[str] = None
 
 class CheckDuplicateRequest(BaseModel):
     description: str
@@ -188,6 +190,8 @@ async def submit_issue(request: IssueSubmitRequest):
             "latitude": request.latitude,
             "longitude": request.longitude,
             "image_url": request.image_url,
+            "reporter_name": request.reporter_name,
+            "reporter_phone": request.reporter_phone,
             "embedding": embedding,
             "upvote_count": 1,
             "status": "pending"
