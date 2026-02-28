@@ -8,13 +8,18 @@ def render_nav():
         [data-testid="stSidebar"] { display: none !important; }
         /* Cleaner top header */
         header { visibility: hidden !important; }
+        /* Move content up */
+        .block-container {
+            padding-top: 2rem !important;
+            padding-bottom: 0rem !important;
+        }
     </style>
     """, unsafe_allow_html=True)
     
     col_logo, col_space, col1, col2, col3, col4, col5, col6 = st.columns([2.5, 0.5, 1, 1, 1, 1, 1.2, 1.2])
     
     with col_logo:
-        st.markdown("<h3 style='margin: 0; padding: 0; color: #2563EB; font-family: \"Bebas Neue\", sans-serif; letter-spacing: 1px;'>🏙️ CivicSense</h3><p style='margin: 0; font-size: 0.8rem; color: #6b7280;'>AI-Powered Civic Intelligence Platform</p>", unsafe_allow_html=True)
+        st.markdown("<h3 style='margin: 0; padding: 0; color: #2563EB !important; font-family: \"Bebas Neue\", sans-serif; letter-spacing: 1px;'>🏙️ CivicSense</h3><p style='margin: 0; font-size: 0.8rem; color: #94a3b8 !important;'>AI-Powered Civic Intelligence Platform</p>", unsafe_allow_html=True)
         
     with col1:
         st.page_link("pages/Home.py", label="Home")
@@ -32,10 +37,5 @@ def render_nav():
     st.divider()
 
 def render_footer():
-    st.markdown("""
-    <div style="background-color: #f8fafc; text-align: center; color: #64748b; margin-top: 60px; padding: 30px; border-top: 1px solid #e2e8f0; border-radius: 8px;">
-        <h4 style="margin: 0; color: #334155;">CivicSense v1.0</h4>
-        <p style="margin: 5px 0 0 0; font-weight: 500;">Ready for deployment.</p>
-        <p style="font-size: 0.85rem; margin: 10px 0 0 0;">Public Transparency • AI Reporting Workflow • Government API Integration</p>
-    </div>
-    """, unsafe_allow_html=True)
+    # Footer removed as requested
+    pass

@@ -41,19 +41,17 @@ with left_col:
         insights = {"top_category": "Unknown", "top_ward": "Unknown", "trending": []}
         
     st.markdown(f"""
-    <div class='issues-card' style='background-color:#f8fafc; padding: 20px;'>
-        <p style='margin:0 0 5px 0; font-size:0.9rem; color:#64748b; text-transform:uppercase; font-weight:bold;'>Most Reported Issue Type</p>
-        <h4 style='margin:0 0 1.5rem 0; color:#0f172a;'>{insights['top_category']}</h4>
-        
-        <p style='margin:0 0 5px 0; font-size:0.9rem; color:#64748b; text-transform:uppercase; font-weight:bold;'>Red Zone Area</p>
-        <h4 style='margin:0 0 1.5rem 0; color:#0f172a;'>{insights['top_ward']}</h4>
-        
-        <p style='margin:0 0 10px 0; font-size:0.9rem; color:#64748b; text-transform:uppercase; font-weight:bold;'>Trending Issues</p>
-        <ul style='margin:0; padding-left:1.2rem; color:#334155; line-height:1.6;'>
-            {''.join([f"<li>{t}</li>" for t in insights.get('trending', [])])}
-        </ul>
-    </div>
-    """, unsafe_allow_html=True)
+<div class='issues-card' style='padding: 20px;'>
+    <p style='margin:0 0 5px 0; font-size:0.9rem; color:#94a3b8 !important; text-transform:uppercase; font-weight:bold;'>Most Reported Issue Type</p>
+    <h4 style='margin:0 0 1.5rem 0;'>{insights['top_category']}</h4>
+    <p style='margin:0 0 5px 0; font-size:0.9rem; color:#94a3b8 !important; text-transform:uppercase; font-weight:bold;'>Red Zone Area</p>
+    <h4 style='margin:0 0 1.5rem 0;'>{insights['top_ward']}</h4>
+    <p style='margin:0 0 10px 0; font-size:0.9rem; color:#94a3b8 !important; text-transform:uppercase; font-weight:bold;'>Trending Issues</p>
+    <ul style='margin:0; padding-left:1.2rem; line-height:1.6;'>
+        {''.join([f"<li>{t}</li>" for t in insights.get('trending', [])])}
+    </ul>
+</div>
+""", unsafe_allow_html=True)
 
 with right_col:
     st.markdown("### 📋 Recent Platform Activity")
@@ -70,24 +68,24 @@ with right_col:
                     title_text = issue.get('title', f"Issue #{issue['id']}")
                     
                     html_card = f"""
-                    <div class="issues-card" style="margin-bottom: 1rem; border-left: 4px solid {badge_color}; padding: 15px 20px;">
-                        <div style="display: flex; justify-content: space-between; align-items: start;">
-                            <div style="flex: 1;">
-                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                                    <span class="category-badge" style="background-color: {badge_color}15; color: {badge_color}; border: 1px solid {badge_color}30; margin:0;">{status_text}</span>
-                                    <span style="font-size:0.85rem; color:#64748b;">• {issue.get('date', 'Recent')}</span>
-                                </div>
-                                <h4 style="margin: 0 0 8px 0; color:#0f172a;">{title_text}</h4>
-                                <p class="secondary-text" style="margin:0; font-size: 0.95rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{issue['description']}</p>
-                            </div>
-                            <div style="text-align: right; min-width: 60px;">
-                                <div style="background-color: #f1f5f9; padding: 5px 10px; border-radius: 6px; display:inline-block;">
-                                    <span style="font-size:1.1rem; color:#475569; font-weight:bold;">⬆️ {issue['votes']}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    """
+<div class="issues-card" style="margin-bottom: 1rem; border-left: 4px solid {badge_color}; padding: 15px 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: start;">
+        <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                <span class="category-badge" style="background-color: {badge_color}15; color: {badge_color}; border: 1px solid {badge_color}30; margin:0;">{status_text}</span>
+                <span style="font-size:0.85rem; color:#64748b;">• {issue.get('date', 'Recent')}</span>
+            </div>
+            <h4 style="margin: 0 0 8px 0; color:#0f172a;">{title_text}</h4>
+            <p class="secondary-text" style="margin:0; font-size: 0.95rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{issue['description']}</p>
+        </div>
+        <div style="text-align: right; min-width: 60px;">
+            <div style="background-color: #f1f5f9; padding: 5px 10px; border-radius: 6px; display:inline-block;">
+                <span style="font-size:1.1rem; color:#475569; font-weight:bold;">⬆️ {issue['votes']}</span>
+            </div>
+        </div>
+    </div>
+</div>
+"""
                     st.markdown(html_card, unsafe_allow_html=True)
                 
                 if st.button("View All Issues ➔", use_container_width=True):
