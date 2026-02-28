@@ -52,7 +52,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- HEADER ---
-st.title("🏛️ Vox Civic Control Center")
+st.title("Vox Civic Control Center")
 st.markdown("Real-time government analytics and grievance management platform.")
 
 # --- DATA FETCHING ---
@@ -81,7 +81,7 @@ df['status'] = df['status'].fillna('Pending')
 df['severity'] = df['severity'].fillna('Low')
 
 # --- SIDEBAR FILTERS ---
-st.sidebar.markdown("## ⚙️ Control Panel")
+st.sidebar.markdown("## Control Panel")
 st.sidebar.markdown("Filter system data globally.")
 
 categories = ["All"] + list(df['issue_type'].dropna().unique())
@@ -94,7 +94,7 @@ wards = ["All"] + list(df['ward'].unique())
 selected_ward = st.sidebar.selectbox("Ward", wards)
 
 st.sidebar.divider()
-if st.sidebar.button("🔄 Force Refresh Data", use_container_width=True):
+if st.sidebar.button("Force Refresh Data", use_container_width=True, icon=":material/refresh:"):
     st.cache_data.clear()
     st.rerun()
 
@@ -117,7 +117,7 @@ col3.metric("Resolved", str(resolved_count))
 critical_count = len(filtered_df[(filtered_df['severity'].str.lower() == "critical") & (~filtered_df['status'].str.lower().isin(["resolved", "closed"]))])
 col4.metric("Critical Hazards", str(critical_count))
 
-st.markdown("<h3 class='section-header'>🗺️ Geographic Intelligence</h3>", unsafe_allow_html=True)
+st.markdown("<h3 class='section-header'>Geographic Intelligence</h3>", unsafe_allow_html=True)
 
 # --- MAP VISUALIZATION ---
 map_col, chart_col = st.columns([1.5, 1])
@@ -187,7 +187,7 @@ with chart_col:
         st.write("No data for charts")
 
 
-st.markdown("<h3 class='section-header'>📂 Active Master Grid & Action Desk</h3>", unsafe_allow_html=True)
+st.markdown("<h3 class='section-header'>Active Master Grid & Action Desk</h3>", unsafe_allow_html=True)
 
 table_col, action_col = st.columns([2, 1])
 
@@ -210,7 +210,7 @@ with table_col:
                 "issue_type": "Category",
                 "ward": "Ward",
                 "severity": "Severity",
-                "upvote_count": st.column_config.NumberColumn("Priority (Votes)", format="%d ⬆️"),
+                "upvote_count": st.column_config.NumberColumn("Priority (Votes)", format="%d"),
                 "status": "Status",
                 "created_at": "Reported On"
             }
@@ -220,7 +220,7 @@ with table_col:
 
 # --- ACTION DESK ---
 with action_col:
-    st.markdown("#### ⚡ Issue Control Desk")
+    st.markdown("#### Issue Control Desk")
     st.write("Select a Track ID to escalate or resolve.")
     
     if not filtered_df.empty:
@@ -235,7 +235,7 @@ with action_col:
                 
                 reporter_text = issue_record.get('reporter_name')
                 phone_text = issue_record.get('reporter_phone')
-                st.markdown(f"**📱 Reporter Entry:** {reporter_text if pd.notna(reporter_text) else 'Anonymous'} | {phone_text if pd.notna(phone_text) else 'No Contact'}")
+                st.markdown(f"**Reporter Entry:** {reporter_text if pd.notna(reporter_text) else 'Anonymous'} | {phone_text if pd.notna(phone_text) else 'No Contact'}")
                 
                 # Show image if exists
                 img_url = issue_record.get('image_url')
@@ -261,7 +261,7 @@ with action_col:
                             timeout=5
                         )
                         if patch_res.status_code == 200:
-                            st.success(f"✅ Track ID #{selected_id} status escalated to {new_status}!")
+                            st.success(f"Track ID #{selected_id} status escalated to {new_status}!", icon=":material/check_circle:")
                             st.cache_data.clear()
                             st.rerun()
                         else:

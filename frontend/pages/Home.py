@@ -9,12 +9,6 @@ render_nav()
 
 API_URL = "http://localhost:8000"
 
-st.markdown("""
-<div style="text-align: center; margin: 2rem 0 3rem 0;">
-    <h1 style='color: #1e293b; font-family: "Bebas Neue", sans-serif; letter-spacing: 2px; font-size: 4rem; margin-bottom: 0.5rem;'>AI-Powered Civic Intelligence</h1>
-    <p style='color: #64748b; font-size: 1.2rem; max-width: 600px; margin: 0 auto;'>Report, track, and resolve community issues natively through real-time geo-spatial intelligence.</p>
-</div>
-""", unsafe_allow_html=True)
 
 # --- STATS ROW ---
 try:
@@ -39,14 +33,14 @@ st.divider()
 left_col, right_col = st.columns([1, 2])
 
 with left_col:
-    st.markdown("### 🧠 Civic Intelligence")
+    st.markdown("### Civic Intelligence")
     try:
         ins_res = requests.get(f"{API_URL}/api/insights", timeout=5)
         insights = ins_res.json() if ins_res.status_code == 200 else {"top_category": "Loading...", "top_ward": "Loading...", "trending": []}
     except:
         insights = {"top_category": "Unknown", "top_ward": "Unknown", "trending": []}
         
-    st.markdown(f"""
+        st.markdown(f"""
 <div class='issues-card' style='padding: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);'>
     <p style='margin:0 0 5px 0; font-size:1rem; color:#94a3b8 !important; text-transform:uppercase; font-weight:bold; letter-spacing: 1px;'>Most Reported Issue Type</p>
     <h4 style='margin:0 0 1.5rem 0; font-size: 2.2rem; color: #0f172a;'>{insights['top_category']}</h4>
@@ -59,12 +53,30 @@ with left_col:
 </div>
 """, unsafe_allow_html=True)
 
+    st.markdown("<h3 style='margin-top:30px;'>Global Updates</h3>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#64748b; margin-top:-10px; margin-bottom:20px;'>Live feed of civic resolutions.</p>", unsafe_allow_html=True)
+    try:
+        up_res = requests.get(f"{API_URL}/api/platform_updates", timeout=5)
+        if up_res.status_code == 200:
+            updates = up_res.json()
+            if updates:
+                st.markdown("<div class='timeline-container'>", unsafe_allow_html=True)
+                for update in updates:
+                    st.markdown(f"""
+                    <div class='timeline-item'>
+                        <div class='timeline-date'>{update.get('date', 'Recent')}</div>
+                        <h5 class='timeline-event'>{update.get('event', 'Update')}</h5>
+                        <p class='timeline-desc'>{update.get('description', '')}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+    except:
+        pass
+
 with right_col:
-    st.markdown("### 📋 Recent Platform Activity")
+    st.markdown("### Recent Platform Activity")
     
-    # --- LOCATION BASED FILTERING ---
-    use_location = st.toggle("📍 Filter by My Location", value=False, key="home_use_loc")
-    
+    use_location = st.toggle("Filter by My Location", value=False, key="home_use_loc")
     radius = 5
     issues_url = f"{API_URL}/api/issues"
     
@@ -86,9 +98,7 @@ with right_col:
                 
         user_lat = st.session_state.get("user_lat")
         user_lon = st.session_state.get("user_lon")
-        
         radius = st.slider("Select Radius (km)", 1, 20, 5, key="home_map_rad")
-        
         if user_lat and user_lon:
             issues_url += f"?lat={user_lat}&lon={user_lon}&radius={radius}"
             st.info(f"Showing issues within {radius} km of your location")
@@ -98,7 +108,7 @@ with right_col:
     try:
         response = requests.get(issues_url, timeout=5)
         if response.status_code == 200:
-            issues = response.json()[:3]  # Only show top 3
+            issues = response.json()[:3]
             if not issues:
                 st.info("No reported issues yet.")
             else:
@@ -122,7 +132,7 @@ with right_col:
         </div>
         <div style="text-align: right; min-width: 70px;">
             <div style="background-color: #f8fafc; padding: 8px 12px; border-radius: 8px; display:inline-block; border: 1px solid #e2e8f0;">
-                <span style="font-size:1.2rem; color:#475569; font-weight:bold;">⬆️ {issue['votes']}</span>
+                <span style="font-size:1.2rem; color:#475569; font-weight:bold;">▲ {issue['votes']}</span>
             </div>
         </div>
     </div>
@@ -130,7 +140,7 @@ with right_col:
 """
                     st.markdown(html_card, unsafe_allow_html=True)
                 
-                if st.button("View All Issues ➔", use_container_width=True):
+                if st.button("View All Issues →", use_container_width=True):
                     st.switch_page("pages/Issues_Feed.py")
         else:
             st.error("Error fetching issues.")
