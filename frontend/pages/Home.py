@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+from streamlit_js_eval import get_geolocation
 from components.nav import render_nav, render_footer
 from utils import apply_custom_css
 
@@ -55,8 +56,39 @@ with left_col:
 
 with right_col:
     st.markdown("### 📋 Recent Platform Activity")
+    
+    # --- LOCATION BASED FILTERING ---
+   
+    
+    if "user_lat" not in st.session_state or "user_lon" not in st.session_state:
+        location = get_geolocation("Fetch Location")
+        if location and "coords" in location:
+            st.session_state["user_lat"] = location["coords"]["latitude"]
+            st.session_state["user_lon"] = location["coords"]["longitude"]
+            st.rerun()
+            
+        l_col1, l_col2 = st.columns(2)
+        man_lat = l_col1.number_input("Latitude", value=19.0760, format="%.4f", key="home_lat")
+        man_lon = l_col2.number_input("Longitude", value=72.8777, format="%.4f", key="home_lon")
+        if st.button("Use Manual Location", key="home_loc_btn"):
+            st.session_state["user_lat"] = man_lat
+            st.session_state["user_lon"] = man_lon
+            st.rerun()
+            
+    user_lat = st.session_state.get("user_lat")
+    user_lon = st.session_state.get("user_lon")
+    
+    radius = st.slider("Select Radius (km)", 1, 20, 5)
+    
+    issues_url = f"{API_URL}/api/issues"
+    if user_lat and user_lon:
+        issues_url += f"?lat={user_lat}&lon={user_lon}&radius={radius}"
+        st.info(f"Showing issues within {radius} km of your location")
+    else:
+        st.info("Showing all Mumbai issues")
+    
     try:
-        response = requests.get(f"{API_URL}/api/issues", timeout=5)
+        response = requests.get(issues_url, timeout=5)
         if response.status_code == 200:
             issues = response.json()[:3]  # Only show top 3
             if not issues:
