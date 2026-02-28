@@ -60,6 +60,11 @@ class GeneratePDFRequest(BaseModel):
     category: str
     location: str
 
+class SOSRequest(BaseModel):
+    description: str
+    latitude: float
+    longitude: float
+
 app = FastAPI(title="Vox Backend", description="Vox civic grievance platform backend API")
 
 @app.post("/api/submit-issue")
@@ -207,6 +212,64 @@ async def submit_issue(request: IssueSubmitRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save complaint to database: {str(e)}")
+
+@app.post("/api/sos")
+async def report_sos(request: SOSRequest):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not initialized")
+        
+    try:
+        new_sos = {
+            "description": f"SOS EMERGENCY: {request.description}",
+            "issue_type": "SOS Emergency",
+            "severity": "Critical",
+            "latitude": request.latitude,
+            "longitude": request.longitude,
+            "status": "pending",
+            "upvote_count": 999  # Give it high priority
+        }
+        
+        insert_response = supabase.table("complaints").insert(new_sos).execute()
+        
+        return {
+            "status": "success",
+            "message": "SOS alert broadcasted to nearby users.",
+            "data": insert_response.data[0] if insert_response.data else None
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to broadcast SOS: {str(e)}")
+
+@app.get("/api/active-sos")
+async def get_active_sos(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    radius: float = Query(5.0)  # Default 5km radius
+):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not initialized")
+        
+    try:
+        # Get pending SOS emergencies
+        response = supabase.table("complaints").select("id, description, latitude, longitude, created_at").eq("status", "pending").eq("issue_type", "SOS Emergency").order("created_at", desc=True).execute()
+        
+        active_alerts = []
+        for row in response.data:
+            i_lat = row.get("latitude")
+            i_lon = row.get("longitude")
+            
+            if i_lat is not None and i_lon is not None:
+                dist = calculate_distance(lat, lon, i_lat, i_lon)
+                if dist <= radius:
+                    active_alerts.append({
+                        "id": row.get("id"),
+                        "description": row.get("description").replace("SOS EMERGENCY: ", ""),
+                        "distance_km": round(dist, 2),
+                        "time": row.get("created_at")[:16].replace("T", " ") if row.get("created_at") else "Just now"
+                    })
+                    
+        return {"alerts": active_alerts}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch SOS alerts: {str(e)}")
 
 @app.post("/api/parse-circular")
 async def parse_circular(file: UploadFile = File(...)):
