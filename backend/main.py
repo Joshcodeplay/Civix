@@ -86,7 +86,12 @@ async def submit_issue(request: IssueSubmitRequest):
     
     try:
         response = model.generate_content(extraction_prompt, generation_config={"response_mime_type": "application/json"})
-        extracted_data = json.loads(response.text)
+        raw_text = response.text.strip()
+        if raw_text.startswith("```json"):
+            raw_text = raw_text[7:]
+        if raw_text.endswith("```"):
+            raw_text = raw_text[:-3]
+        extracted_data = json.loads(raw_text.strip())
     except ResourceExhausted:
         return {"error": "rate_limit", "message": "City servers busy, using fallback location."}
     except Exception as e:
@@ -309,7 +314,12 @@ async def parse_issue(request: ParseRequest):
     """
     try:
         response = model.generate_content(extraction_prompt, generation_config={"response_mime_type": "application/json"})
-        return json.loads(response.text)
+        raw_text = response.text.strip()
+        if raw_text.startswith("```json"):
+            raw_text = raw_text[7:]
+        if raw_text.endswith("```"):
+            raw_text = raw_text[:-3]
+        return json.loads(raw_text.strip())
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse: {str(e)}")
 
