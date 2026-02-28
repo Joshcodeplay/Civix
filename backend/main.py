@@ -417,7 +417,7 @@ async def generate_pdf(request: GeneratePDFRequest):
 
 @app.get("/api/dashboard_stats")
 async def get_dashboard_stats():
-    if not supabase: return {}
+    if not supabase: return {"total": 0, "active": 0, "resolved": 0, "emergency": 0}
     res = supabase.table("complaints").select("id, status, severity").execute()
     total = len(res.data)
     active = sum(1 for r in res.data if r.get("status", "").lower() in ["pending", "in progress"])
@@ -427,7 +427,7 @@ async def get_dashboard_stats():
 
 @app.get("/api/insights")
 async def get_insights():
-    if not supabase: return {}
+    if not supabase: return {"top_category": "N/A", "top_ward": "General", "trending": []}
     res = supabase.table("complaints").select("issue_type, ward").execute()
     counts = {}
     ward_counts = {}
