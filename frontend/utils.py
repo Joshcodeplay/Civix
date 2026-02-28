@@ -3,9 +3,15 @@ import streamlit as st
 def apply_custom_css():
     st.markdown("""
     <style>
-    /* Background color */
+    /* Background color and Text color */
     .stApp {
         background-color: #F7F9FC;
+        color: #111827;
+    }
+    
+    /* Ensure markdown and paragraph text is visible */
+    p, span, div {
+        color: inherit;
     }
     
     /* Cards */
