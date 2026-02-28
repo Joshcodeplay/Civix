@@ -3,3 +3,7 @@ requests
 streamlit-folium
 folium
 streamlit-geolocation
+beautifulsoup4
+pdfplumber
+google-generativeai
+python-dotenv
