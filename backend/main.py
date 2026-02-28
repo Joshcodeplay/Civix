@@ -201,6 +201,81 @@ async def parse_circular(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse circular: {str(e)}")
 
+@app.get("/api/issues")
+async def get_issues():
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not initialized")
+    try:
+        response = supabase.table("complaints").select("id, description, issue_type, severity, ward, latitude, longitude, upvote_count, status, created_at").order("created_at", desc=True).execute()
+        
+        # Map to what frontend expects
+        issues = []
+        for row in response.data:
+            issues.append({
+                "id": row.get("id"),
+                "description": row.get("description"),
+                "category": row.get("issue_type", "General"),
+                "votes": row.get("upvote_count", 0),
+                "emergency": row.get("severity") in ["High", "Critical"],
+                "latitude": row.get("latitude"),
+                "longitude": row.get("longitude")
+            })
+        return issues
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch issues: {str(e)}")
+
+@app.post("/api/vote/{issue_id}")
+async def vote_issue(issue_id: int):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not initialized")
+    try:
+        # Get current count
+        res = supabase.table("complaints").select("upvote_count").eq("id", issue_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Issue not found")
+            
+        new_count = res.data[0]["upvote_count"] + 1
+        update_res = supabase.table("complaints").update({"upvote_count": new_count}).eq("id", issue_id).execute()
+        return {"status": "success", "new_count": new_count}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to vote: {str(e)}")
+
+class ParseRequest(BaseModel):
+    text: str
+
+@app.post("/api/parse_issue")
+async def parse_issue(request: ParseRequest):
+    extraction_prompt = f"""
+    Analyze the following issue description:
+    "{request.text}"
+    
+    1. Extract the 'category' (e.g., Pothole, Water Leak, Garbage, etc.).
+    2. Clean up the description.
+    
+    Return a strictly valid JSON block containing:
+    {{
+        "category": "string",
+        "description": "string"
+    }}
+    """
+    try:
+        response = model.generate_content(extraction_prompt, generation_config={"response_mime_type": "application/json"})
+        return json.loads(response.text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse: {str(e)}")
+
+@app.get("/api/notices")
+async def get_notices():
+    # Placeholder for notices, can be connected to DB later
+    return [
+        {
+            "title": "Scheduled Water Cut in Ward A",
+            "summary": "There will be a scheduled water cut on Oct 12 due to pipeline maintenance.",
+            "source": "Municipal Corporation",
+            "date": "2023-10-10"
+        }
+    ]
+
 @app.get("/")
 def root():
     return {"message": "Welcome to the Vox Backend API!"}

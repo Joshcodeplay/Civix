@@ -14,7 +14,7 @@ st.header("Recent Issues")
 API_URL = "http://localhost:8000"
 
 try:
-    response = requests.get(f"{API_URL}/issues", timeout=5)
+    response = requests.get(f"{API_URL}/api/issues", timeout=5)
     if response.status_code == 200:
         issues = response.json()
         if not issues:

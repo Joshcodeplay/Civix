@@ -13,7 +13,7 @@ API_URL = "http://localhost:8000"
 
 def fetch_notices():
     try:
-        response = requests.get(f"{API_URL}/notices", timeout=5)
+        response = requests.get(f"{API_URL}/api/notices", timeout=5)
         if response.status_code == 200:
             return response.json()
     except Exception as e:

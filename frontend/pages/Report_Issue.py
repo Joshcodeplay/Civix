@@ -29,7 +29,7 @@ if st.button("Analyze Issue", type="primary"):
     if user_input.strip():
         try:
             with st.spinner("Analyzing..."):
-                response = requests.post(f"{API_URL}/parse_issue", json={"text": user_input}, timeout=10)
+                response = requests.post(f"{API_URL}/api/parse_issue", json={"text": user_input}, timeout=10)
                 if response.status_code == 200:
                     data = response.json()
                     st.session_state.parsed_category = data.get("category", "Unknown")
@@ -100,7 +100,7 @@ if st.button("Submit Issue", type="primary", use_container_width=True):
         }
         try:
             with st.spinner("Submitting..."):
-                response = requests.post(f"{API_URL}/report_issue", json=payload, timeout=10)
+                response = requests.post(f"{API_URL}/api/submit-issue", json=payload, timeout=10)
                 if response.status_code == 200:
                     st.success("Issue submitted successfully!")
                     # Reset state

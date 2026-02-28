@@ -13,7 +13,7 @@ API_URL = "http://localhost:8000"
 
 def fetch_issues():
     try:
-        response = requests.get(f"{API_URL}/issues", timeout=5)
+        response = requests.get(f"{API_URL}/api/issues", timeout=5)
         if response.status_code == 200:
             return response.json()
     except Exception as e:
@@ -22,7 +22,7 @@ def fetch_issues():
 
 def vote_issue(issue_id):
     try:
-        response = requests.post(f"{API_URL}/vote/{issue_id}", timeout=5)
+        response = requests.post(f"{API_URL}/api/vote/{issue_id}", timeout=5)
         if response.status_code == 200:
             st.success("Vote recorded successfully!")
             st.rerun()
