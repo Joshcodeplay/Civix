@@ -451,6 +451,54 @@ async def get_dashboard_stats():
     emergency = sum(1 for r in res.data if r.get("severity", "").lower() in ["high", "critical"])
     return {"total": total, "active": active, "resolved": resolved, "emergency": emergency}
 
+class StatusUpdateRequest(BaseModel):
+    status: str
+
+@app.patch("/api/admin/update-status/{issue_id}")
+async def update_issue_status(issue_id: int, request: StatusUpdateRequest):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not initialized")
+    valid_statuses = ["Pending", "In Progress", "Resolved", "Closed"]
+    if request.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    try:
+        res = supabase.table("complaints").update({"status": request.status}).eq("id", issue_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Issue not found")
+        return {"status": "success", "data": res.data[0]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/stats")
+async def get_admin_stats():
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not initialized")
+    try:
+        # Get all complaints to aggregate
+        res = supabase.table("complaints").select("id, status, severity, issue_type, ward, latitude, longitude, upvote_count, description, created_at, reporter_name, reporter_phone, image_url").execute()
+        
+        complaints = res.data
+        total_complaints = len(complaints)
+        
+        # Aggregate by category
+        categories = {}
+        for c in complaints:
+            cat = c.get("issue_type") or "Unknown"
+            categories[cat] = categories.get(cat, 0) + 1
+            
+        # Get top 5 most upvoted unresolved complaints
+        active_complaints = [c for c in complaints if c.get("status", "").lower() not in ["resolved", "closed"]]
+        top_priority = sorted(active_complaints, key=lambda x: x.get("upvote_count", 0), reverse=True)[:5]
+        
+        return {
+            "total_complaints": total_complaints,
+            "category_counts": categories,
+            "top_priority": top_priority,
+            "all_complaints": complaints
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/insights")
 async def get_insights():
     if not supabase: return {"top_category": "N/A", "top_ward": "General", "trending": []}
