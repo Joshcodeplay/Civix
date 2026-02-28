@@ -63,6 +63,11 @@ with col_main:
     st.markdown("### 📝 Description")
     st.markdown(f"<div class='issues-card' style='background-color: #f8fafc; color: #334155; font-size: 1.05rem; line-height: 1.6;'>{issue['description']}</div>", unsafe_allow_html=True)
     
+    if issue.get('image_url'):
+        st.markdown("### 📸 Evidence Photo")
+        st.image(issue['image_url'], use_container_width=True)
+        st.write("")
+        
     st.markdown("### 💬 Activity & Comments")
     
     # Render comments timeline

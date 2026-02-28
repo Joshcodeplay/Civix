@@ -63,32 +63,35 @@ with right_col:
     st.markdown("### 📋 Recent Platform Activity")
     
     # --- LOCATION BASED FILTERING ---
-   
+    use_location = st.toggle("📍 Filter by My Location", value=False, key="home_use_loc")
     
-    if "user_lat" not in st.session_state or "user_lon" not in st.session_state:
-        location = get_geolocation("Fetch Location")
-        if location and "coords" in location:
-            st.session_state["user_lat"] = location["coords"]["latitude"]
-            st.session_state["user_lon"] = location["coords"]["longitude"]
-            st.rerun()
-            
-        l_col1, l_col2 = st.columns(2)
-        man_lat = l_col1.number_input("Latitude", value=19.0760, format="%.4f", key="home_lat")
-        man_lon = l_col2.number_input("Longitude", value=72.8777, format="%.4f", key="home_lon")
-        if st.button("Use Manual Location", key="home_loc_btn"):
-            st.session_state["user_lat"] = man_lat
-            st.session_state["user_lon"] = man_lon
-            st.rerun()
-            
-    user_lat = st.session_state.get("user_lat")
-    user_lon = st.session_state.get("user_lon")
-    
-    radius = st.slider("Select Radius (km)", 1, 20, 5)
-    
+    radius = 5
     issues_url = f"{API_URL}/api/issues"
-    if user_lat and user_lon:
-        issues_url += f"?lat={user_lat}&lon={user_lon}&radius={radius}"
-        st.info(f"Showing issues within {radius} km of your location")
+    
+    if use_location:
+        if "user_lat" not in st.session_state or "user_lon" not in st.session_state:
+            location = get_geolocation("Fetch Location")
+            if location and "coords" in location:
+                st.session_state["user_lat"] = location["coords"]["latitude"]
+                st.session_state["user_lon"] = location["coords"]["longitude"]
+                st.rerun()
+                
+            l_col1, l_col2 = st.columns(2)
+            man_lat = l_col1.number_input("Latitude", value=19.0760, format="%.4f", key="home_lat")
+            man_lon = l_col2.number_input("Longitude", value=72.8777, format="%.4f", key="home_lon")
+            if st.button("Use Manual Location", key="home_loc_btn"):
+                st.session_state["user_lat"] = man_lat
+                st.session_state["user_lon"] = man_lon
+                st.rerun()
+                
+        user_lat = st.session_state.get("user_lat")
+        user_lon = st.session_state.get("user_lon")
+        
+        radius = st.slider("Select Radius (km)", 1, 20, 5, key="home_map_rad")
+        
+        if user_lat and user_lon:
+            issues_url += f"?lat={user_lat}&lon={user_lon}&radius={radius}"
+            st.info(f"Showing issues within {radius} km of your location")
     else:
         st.info("Showing all Mumbai issues")
     
@@ -103,17 +106,19 @@ with right_col:
                     badge_color = "#ef4444" if issue['emergency'] else ("#10b981" if issue.get("status") == "Resolved" else "#3b82f6")
                     status_text = issue.get("status", "Pending")
                     title_text = issue.get('title', f"Issue #{issue['id']}")
+                    desc_safe = issue.get('description', '').replace('\n', '<br>')
+                    img_html = f'<div style="margin-top: 12px;"><img src="{issue.get("image_url")}" style="width:100%; max-height:150px; object-fit:cover; border-radius:8px; border: 1px solid #e2e8f0;" /></div>' if issue.get('image_url') else ''
                     
                     html_card = f"""
 <div class="issues-card" style="margin-bottom: 1.5rem; border-left: 5px solid {badge_color}; padding: 20px 25px; box-shadow: 0 5px 15px rgba(0,0,0,0.05);">
     <div style="display: flex; justify-content: space-between; align-items: start;">
         <div style="flex: 1;">
-            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px;">
                 <span class="category-badge" style="background-color: {badge_color}15; color: {badge_color}; border: 1px solid {badge_color}30; margin:0; font-size: 0.85rem; padding: 4px 10px;">{status_text}</span>
                 <span style="font-size:0.95rem; color:#64748b; font-weight: 500;">• {issue.get('date', 'Recent')}</span>
             </div>
-            <h4 style="margin: 0 0 10px 0; color:#0f172a; font-size: 1.4rem;">{title_text}</h4>
-            <p class="secondary-text" style="margin:0; font-size: 1.05rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.6;">{issue['description']}</p>
+            <h4 style="margin: 0 0 8px 0; color:#0f172a; font-size: 1.25rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4;">{desc_safe}</h4>
+            <p class="secondary-text" style="margin:0; font-size: 0.95rem; color:#64748b; font-weight: 600;">{title_text}</p>{img_html}
         </div>
         <div style="text-align: right; min-width: 70px;">
             <div style="background-color: #f8fafc; padding: 8px 12px; border-radius: 8px; display:inline-block; border: 1px solid #e2e8f0;">
