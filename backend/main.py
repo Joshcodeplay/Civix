@@ -301,22 +301,33 @@ async def report_issue(
         print(f"Warning: Failed to query existing embeddings: {e}")
         
     if not embedding:
-        try:
-            embedding_result = client.models.embed_content(
-                model="text-embedding-004",
-                contents=description,
-                config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
-            )
-            embedding = embedding_result.embeddings[0].values
-        except Exception as e:
-            print(f"Embedding error: {e}")
+        import time
+        for attempt in range(3):
+            try:
+                embedding_result = client.models.embed_content(
+                    model="text-embedding-004",
+                    contents=description,
+                    config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
+                )
+                embedding = embedding_result.embeddings[0].values
+                break  # Success, exit retry loop
+            except APIError as e:
+                if e.code == 429 and attempt < 2:
+                    print(f"Rate limited, retrying embedding ({attempt+1}/3)...")
+                    time.sleep(2)
+                else:
+                    print(f"Embedding error: {e}")
+                    break
+            except Exception as e:
+                print(f"Embedding error: {e}")
+                break
 
     has_gps = latitude != 0.0 and longitude != 0.0
     if embedding and has_gps:
         try:
             rpc_params = {
                 "query_embedding": embedding,
-                "match_threshold": 0.90,
+                "match_threshold": 0.75,
                 "match_count": 1,
                 "loc_lat": latitude,
                 "loc_long": longitude,
@@ -592,7 +603,7 @@ async def parse_issue(request: ParseRequest):
     Analyze the following issue description:
     "{request.text}"
     
-    1. Extract the 'category' (e.g., Pothole, Water Leak, Garbage, etc.).
+    1. Extract the 'category' which MUST be one of the following exact strings: "Roads & Infrastructure", "Water Supply", "Garbage & Solid Waste", "Electricity", "Public Nuisance", "General". If it refers to potholes, it goes to "Roads & Infrastructure". If it refers to trash/garbage, it goes to "Garbage & Solid Waste". Only use "General" as a last resort.
     2. Clean up the description.
     
     Return a strictly valid JSON block containing:
@@ -601,27 +612,33 @@ async def parse_issue(request: ParseRequest):
         "description": "string"
     }}
     """
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
-            contents=extraction_prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                safety_settings=safety_settings
+    import time
+    for attempt in range(3):
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-lite",
+                contents=extraction_prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    safety_settings=safety_settings
+                )
             )
-        )
-        raw_text = response.text.strip()
-        if raw_text.startswith("```json"):
-            raw_text = raw_text[7:]
-        if raw_text.endswith("```"):
-            raw_text = raw_text[:-3]
-        return json.loads(raw_text.strip())
-    except APIError as e:
-        if e.code == 429:
-            return {"error": "rate_limit", "category": "General", "description": request.text}
-        raise HTTPException(status_code=500, detail=f"Failed to parse with Gemini: {str(e)}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to parse: {str(e)}")
+            raw_text = response.text.strip()
+            if raw_text.startswith("```json"):
+                raw_text = raw_text[7:]
+            if raw_text.endswith("```"):
+                raw_text = raw_text[:-3]
+            return json.loads(raw_text.strip())
+        except APIError as e:
+            if e.code == 429:
+                if attempt < 2:
+                    print(f"Rate limited on parsing, retrying ({attempt+1}/3)...")
+                    time.sleep(2)
+                    continue
+                return {"error": "rate_limit", "category": "General", "description": request.text}
+            raise HTTPException(status_code=500, detail=f"Failed to parse with Gemini: {str(e)}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to parse: {str(e)}")
 
 @app.post("/api/check_duplicate")
 async def check_duplicate(request: CheckDuplicateRequest):
