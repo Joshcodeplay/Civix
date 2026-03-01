@@ -131,13 +131,23 @@ elif st.session_state.step == 3:
         if search_query.strip():
             try:
                 with st.spinner("Searching..."):
+                    cleaned_query = search_query
+                    try:
+                        clean_res = requests.post(f"{API_URL}/api/clean_location", json={"location": search_query}, timeout=10)
+                        if clean_res.status_code == 200:
+                            cleaned_query = clean_res.json().get("clean_location", search_query)
+                    except Exception as e:
+                        pass
+                        
                     headers = {'User-Agent': 'CivicSense/1.0'}
-                    res = requests.get(f"https://nominatim.openstreetmap.org/search?q={search_query}&format=json&limit=1", headers=headers, timeout=5)
+                    params = {'q': cleaned_query, 'format': 'json', 'limit': 1}
+                    res = requests.get("https://nominatim.openstreetmap.org/search", params=params, headers=headers, timeout=5)
                     if res.status_code == 200 and len(res.json()) > 0:
                         result = res.json()[0]
                         st.session_state.report_data["lat"] = float(result["lat"])
                         st.session_state.report_data["lon"] = float(result["lon"])
                         st.success(f"Found: {result.get('display_name', 'Location')}", icon=":material/check_circle:")
+                        st.rerun()
                     else:
                         st.error("Location not found. Please try another term or use the map below.")
             except Exception as e:
@@ -172,12 +182,16 @@ elif st.session_state.step == 3:
         m = folium.Map(location=[center_lat, center_lon], zoom_start=14)
         if lat and lon:
             folium.Marker([lat, lon], tooltip="Detected Location", icon=folium.Icon(color="blue", icon="info-sign")).add_to(m)
-        map_data = st_folium(m, width=500, height=300)
+        map_key = f"map_{lat}_{lon}" if lat and lon else "map_default"
+        map_data = st_folium(m, width=500, height=300, key=map_key)
         
         if map_data and map_data.get("last_clicked"):
-            st.session_state.report_data["lat"] = map_data["last_clicked"]["lat"]
-            st.session_state.report_data["lon"] = map_data["last_clicked"]["lng"]
-            st.rerun()
+            click_lat = map_data["last_clicked"]["lat"]
+            click_lon = map_data["last_clicked"]["lng"]
+            if st.session_state.report_data.get("lat") != click_lat or st.session_state.report_data.get("lon") != click_lon:
+                st.session_state.report_data["lat"] = click_lat
+                st.session_state.report_data["lon"] = click_lon
+                st.rerun()
 
     st.write("")
     col1, col2, _ = st.columns([1, 1, 5])

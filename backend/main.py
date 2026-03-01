@@ -67,6 +67,9 @@ class AuthorityRequest(BaseModel):
     category: str
     location: str
 
+class LocationRequest(BaseModel):
+    location: str
+
 class EvidencePDFRequest(BaseModel):
     name: str
     phone: str
@@ -356,6 +359,30 @@ async def report_issue(
         return {"status": "success", "data": res.data[0] if res.data else None}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create report: {str(e)}")
+
+@app.post("/api/clean_location")
+async def clean_location(request: LocationRequest):
+    prompt = f"""
+    Given this conversational location description in Mumbai: '{request.location}'
+    Extract the core landmark, street, or area name that is most likely to be found on Google Maps or OpenStreetMap.
+    Remove conversational filler words like "Outside", "Near", "Behind", "Opposite".
+    Only return the clean location name string. Do not include quotes or surrounding text.
+    Example: 'Outside vikhroli station bus depot' -> 'Vikhroli Station Bus Depot'
+    Example: 'Huge pothole crater near the signal at Andheri East' -> 'Andheri East signal'
+    Return strictly the clean text. 
+    """
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=prompt,
+        )
+        return {"clean_location": response.text.strip()}
+    except APIError as e:
+        if e.code == 429:
+            return {"clean_location": request.location}
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/responsible_authority")
 async def get_responsible_authority(request: AuthorityRequest):
@@ -740,9 +767,9 @@ async def get_dashboard_stats():
     if not supabase: return {"total": 0, "active": 0, "resolved": 0, "emergency": 0}
     res = supabase.table("complaints").select("id, status, severity").execute()
     total = len(res.data)
-    active = sum(1 for r in res.data if r.get("status", "").lower() in ["pending", "in progress"])
-    resolved = sum(1 for r in res.data if r.get("status", "").lower() == "resolved")
-    emergency = sum(1 for r in res.data if r.get("severity", "").lower() in ["high", "critical"])
+    active = sum(1 for r in res.data if (r.get("status") or "").lower() in ["pending", "in progress"])
+    resolved = sum(1 for r in res.data if (r.get("status") or "").lower() == "resolved")
+    emergency = sum(1 for r in res.data if (r.get("severity") or "").lower() in ["high", "critical"])
     return {"total": total, "active": active, "resolved": resolved, "emergency": emergency}
 
 class StatusUpdateRequest(BaseModel):
@@ -781,7 +808,7 @@ async def get_admin_stats():
             categories[cat] = categories.get(cat, 0) + 1
             
         # Get top 5 most upvoted unresolved complaints
-        active_complaints = [c for c in complaints if c.get("status", "").lower() not in ["resolved", "closed"]]
+        active_complaints = [c for c in complaints if (c.get("status") or "").lower() not in ["resolved", "closed"]]
         top_priority = sorted(active_complaints, key=lambda x: x.get("upvote_count", 0), reverse=True)[:5]
         
         return {

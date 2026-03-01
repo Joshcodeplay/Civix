@@ -1,3 +1,8 @@
+DROP TABLE IF EXISTS complaints CASCADE;
+DROP FUNCTION IF EXISTS match_complaints(vector(768), float, int, double precision, double precision, float);
+DROP FUNCTION IF EXISTS match_complaints(vector(3072), float, int, double precision, double precision, float);
+DROP FUNCTION IF EXISTS match_complaints(vector, double precision, integer, double precision, double precision, double precision);
+
 -- Enable the pgvector extension to work with embedding vectors
 create extension if not exists vector;
 
@@ -13,7 +18,7 @@ create table if not exists complaints (
     image_url text,
     reporter_name text,
     reporter_phone text,
-    embedding vector(3072), -- Gemini text-embedding-004 has 768 dimensions
+    embedding vector(768), -- Gemini text-embedding-004 has 768 dimensions
     upvote_count integer default 1,
     status text default 'pending',
     created_at timestamp with time zone default timezone('utc'::text, now())
@@ -65,9 +70,9 @@ begin
         case 
             when c.latitude is not null and c.longitude is not null and loc_lat is not null and loc_long is not null then
                 6371000 * acos(
-                    cos(radians(loc_lat)) * cos(radians(c.latitude)) *
+                    LEAST(1.0, cos(radians(loc_lat)) * cos(radians(c.latitude)) *
                     cos(radians(c.longitude) - radians(loc_long)) +
-                    sin(radians(loc_lat)) * sin(radians(c.latitude))
+                    sin(radians(loc_lat)) * sin(radians(c.latitude)))
                 )
             else 
                 null
@@ -80,9 +85,9 @@ begin
         or 
         (
             6371000 * acos(
-                cos(radians(loc_lat)) * cos(radians(c.latitude)) *
+                LEAST(1.0, cos(radians(loc_lat)) * cos(radians(c.latitude)) *
                 cos(radians(c.longitude) - radians(loc_long)) +
-                sin(radians(loc_lat)) * sin(radians(c.latitude))
+                sin(radians(loc_lat)) * sin(radians(c.latitude)))
             ) <= radius_meters
         )
     )
