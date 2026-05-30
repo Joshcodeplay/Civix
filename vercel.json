@@ -1,15 +1,14 @@
 {
-  "experimentalServices": {
-    "frontend": {
-      "root": "frontend",
-      "routePrefix": "/",
-      "framework": null,
-      "entrypoint": "index.html"
-    },
-    "backend": {
-      "root": "backend",
-      "routePrefix": "/api",
-      "framework": "fastapi"
+  "builds": [
+    {
+      "src": "backend/main.py",
+      "use": "@vercel/python"
     }
-  }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "backend/main.py"
+    }
+  ]
 }
