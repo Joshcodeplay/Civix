@@ -1,12 +1,15 @@
 {
-    "experimentalServices": {
-        "frontend": {
-            "root": "frontend",
-            "routePrefix": "/"
-        },
-        "backend": {
-            "root": "backend",
-            "routePrefix": "/_/backend"
-        }
+  "experimentalServices": {
+    "frontend": {
+      "root": "frontend",
+      "routePrefix": "/",
+      "framework": null,
+      "entrypoint": "index.html"
+    },
+    "backend": {
+      "root": "backend",
+      "routePrefix": "/api",
+      "framework": "fastapi"
     }
+  }
 }
